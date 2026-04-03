@@ -106,9 +106,7 @@ class TestSoftMatch:
         assert result.matrix.shape == (2, 2)
 
     def test_row_col_sums_bounded(self) -> None:
-        scores = np.array(
-            [[10.0, 5.0, 1.0], [5.0, 10.0, 1.0], [1.0, 1.0, 10.0]]
-        )
+        scores = np.array([[10.0, 5.0, 1.0], [5.0, 10.0, 1.0], [1.0, 1.0, 10.0]])
         result = soft_match(scores, regularization=0.5)
 
         row_sums = result.row_sums()
@@ -139,9 +137,7 @@ class TestSoftMatch:
     def test_converges(self) -> None:
         np.random.seed(42)
         scores = np.random.rand(5, 5) * 10
-        result = soft_match(
-            scores, regularization=1.0, max_iterations=1000
-        )
+        result = soft_match(scores, regularization=1.0, max_iterations=1000)
 
         assert result.converged
 
@@ -229,11 +225,17 @@ class TestSoftMatchWithCalibration:
         spec_skewed_age1 = CalibrationSpec(margins={"age": {0: 0.1, 1: 0.9}})
 
         result_age0 = soft_match_with_calibration(
-            scores, source_df, spec_skewed_age0, regularization=0.5,
+            scores,
+            source_df,
+            spec_skewed_age0,
+            regularization=0.5,
             calibration_weight=5.0,
         )
         result_age1 = soft_match_with_calibration(
-            scores, source_df, spec_skewed_age1, regularization=0.5,
+            scores,
+            source_df,
+            spec_skewed_age1,
+            regularization=0.5,
             calibration_weight=5.0,
         )
 

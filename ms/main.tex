@@ -1,0 +1,500 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[backend=biber,style=authoryear,natbib=true,maxcitenames=2,maxbibnames=99,doi=true,url=false,isbn=false,eprint=false]{biblatex}
+\usepackage{url}
+\usepackage{hyperref}
+\addbibresource{refs.bib}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage{caption}
+
+\captionsetup{font=small, labelfont=bf}
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+\hypersetup{colorlinks=true, linkcolor=black, citecolor=black, urlcolor=blue}
+
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}[proposition]{Corollary}
+\newtheorem{example}[proposition]{Example}
+\theoremstyle{remark}
+\newtheorem*{remark}{Remark}
+
+\input{tables/baseline_macros.tex}
+
+\title{\textbf{Joins as Selection Problems:\
+Objective Misspecification in Record Linkage and Table Integration}}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Standard record linkage scores candidate pairs and then solves an assignment problem. That formulation is exact only when the quality of the linked table is separable over its selected links. Many empirical joins are not evaluated that way. The analyst cares about a property of the linked table as a whole: hierarchical nesting, distributional calibration, referential integrity, temporal continuity, or consistency across multiple joins. We formalize linkage as a selection problem over feasible linked tables. Additive pairwise scoring yields a surrogate objective; the analyst's actual problem typically adds a non-separable table-level criterion or imposes table-level constraints. This perspective connects naturally to Morris's finite selection model (FSM): when the criterion is global, candidate links should be evaluated by their contribution to the evolving table, not in isolation. We show that every penalized optimum is optimal for the constrained problem at the coherence level it attains, that one-to-one disagreements with the truth are combinatorially coupled through permutation cycles, and that downstream bias is bounded by distortion in the analysis labels induced by the join. A household example illustrates the general framework. In a reproducible simulation, the structured optimizer raises person-level accuracy from \HungarianPersonAcc{} under Hungarian assignment to \SetAwarePersonAcc{}, raises exact household recovery from \HungarianHHExact{} to \SetAwareHHExact{}, and lowers absolute bias from \HungarianBias{} to \SetAwareBias{}. The example is specific; the lesson is general.
+\end{abstract}
+
+\section{Introduction}
+
+Classical record linkage begins with pairwise evidence. Candidate record pairs are compared, similarity scores are assigned, and the final linkage is obtained by classification or by solving a one-to-one assignment problem \citep{FellegiSunter1969}. When uniqueness constraints matter, the Hungarian method is a natural optimizer because the objective is additive over matched pairs \citep{Kuhn1955}. That workflow is often exactly right.
+
+The difficulty is that many linked-data problems are not evaluated pair by pair. The object that matters is the linked table. A useful join may need to preserve household membership, panel continuity, foreign-key relationships, cluster composition, or known marginal distributions. These are properties of the output table as a whole, not sums over its rows. In such cases, solving the pairwise assignment problem exactly does not solve the analyst's problem. It solves a surrogate.
+
+The core abstraction is therefore broader than ``household coherence matters.'' It is a mismatch between the \emph{unit of optimization} and the \emph{unit of analysis}. Standard linkage optimizes over candidate links. The analyst's loss function operates on the linked table. Whenever the table must satisfy a global property---hierarchical, distributional, temporal, relational, or compositional---pairwise optimization is misspecified.
+
+This paper develops that claim in four steps. First, we formalize joins as selection problems over feasible linked tables. The additive assignment formulation is one special case, and it is exact only when the analyst's criterion is representable as a linear functional of selected links. Otherwise the natural formulations are constrained or penalized set-level problems. Second, we connect this perspective to the finite selection model (FSM) introduced by \citet{Morris1979} for the RAND Health Insurance Experiment and recently formalized and extended by \citet{Chattopadhyay2026}. The original application was experimental design, but the principle is more general: when the criterion is non-separable, local optimization solves the wrong problem. Third, we state explicit conditions under which a structured or FSM-style criterion can reduce a bound on downstream bias: namely, when it reduces distortion in the analysis labels that enter the estimand. Fourth, we work out households as a minimal example and quantify the resulting gains in a fully reproducible simulation.
+
+The household example is not the thesis of the paper. It is a clean instantiation of a more general idea. A person-level optimizer spends pairwise evidence record by record. A household-level analyst uses the joined table household by household. The same logic applies to entity resolution, calibrated linkage, and multi-table integration.
+
+\section{Joins as selection problems}
+\label{sec:selection}
+
+\subsection{General setup}
+
+Let $A$ and $B$ denote two source tables. Let $E\subseteq A\times B$ be the set of admissible candidate links after blocking or other preliminary restrictions. A \emph{join} is a subset $J\subseteq E$ belonging to a feasible family $\mathcal{J}$ that encodes application constraints such as one-to-one matching, cardinality limits, compatibility restrictions, or higher-order structure. The selected links induce a linked output table $T(J)$.
+
+For each candidate link $e\in E$, let $s_e\in\mathbb{R}$ denote its pairwise score. The standard linkage objective is the additive score
+\begin{equation}
+S(J)=\sum_{e\in J} s_e.
+\label{eq:additive-score-general}
+\end{equation}
+The additive rule solves
+\begin{equation}
+J^{\mathrm{add}}\in\arg\max_{J\in\mathcal{J}} S(J).
+\label{eq:additive-problem-general}
+\end{equation}
+
+To describe the analyst's actual problem, let $\Psi\bigl(T(J)\bigr)$ be a table-level criterion. Depending on the application, $\Psi$ may measure exact recovery of a hierarchy, agreement with known margins, referential integrity, temporal consistency, transitivity in entity resolution, or any other property of the linked table that is not simply the sum of rowwise scores.
+
+Two standard formulations are then
+\begin{equation}
+\max_{J\in\mathcal{J}}\; S(J)
+\qquad\text{subject to}\qquad
+\Psi\bigl(T(J)\bigr)\ge \kappa,
+\label{eq:constrained-general}
+\end{equation}
+and
+\begin{equation}
+\max_{J\in\mathcal{J}}\; U_\lambda(J)
+\equiv
+S(J)+\lambda\,\Psi\bigl(T(J)\bigr),
+\qquad \lambda\ge 0.
+\label{eq:penalized-general}
+\end{equation}
+The constrained form is natural when the analyst knows a minimum acceptable level of coherence or calibration. The penalized form is its Lagrangian relaxation.
+
+The distinction between the additive problem \eqref{eq:additive-problem-general} and the structured problems \eqref{eq:constrained-general}--\eqref{eq:penalized-general} is exact, not rhetorical. If the analyst's criterion can be written as
+\[
+S(J)+\lambda\Psi\bigl(T(J)\bigr)=c+\sum_{e\in E} w_e\,\mathbf{1}\{e\in J\}
+\]
+on the feasible family $\mathcal{J}$ for some weights $w_e$, then the problem is separable and can be absorbed into edge weights. The interesting case begins exactly when no such representation exists. Then the value of a selected link depends on what else is in the join.
+
+\subsection{Penalty and constraint}
+
+\begin{proposition}[Penalized optimum implies constrained optimum at the attained level]
+\label{prop:lgr-general}
+Fix $\lambda\ge 0$, and let $\hat J_\lambda\in\arg\max_{J\in\mathcal{J}} U_\lambda(J)$. Write $\kappa_\lambda=\Psi\bigl(T(\hat J_\lambda)\bigr)$. Then $\hat J_\lambda$ solves the constrained problem \eqref{eq:constrained-general} with threshold $\kappa=\kappa_\lambda$.
+\end{proposition}
+
+\begin{proof}
+Take any $J\in\mathcal{J}$ such that $\Psi\bigl(T(J)\bigr)\ge \kappa_\lambda$. If $S(J)>S(\hat J_\lambda)$, then
+\[
+U_\lambda(J)
+=
+S(J)+\lambda\Psi\bigl(T(J)\bigr)
+\ge
+S(J)+\lambda\kappa_\lambda
+>
+S(\hat J_\lambda)+\lambda\kappa_\lambda
+=
+U_\lambda(\hat J_\lambda),
+\]
+contradicting optimality of $\hat J_\lambda$.
+\end{proof}
+
+Proposition~\ref{prop:lgr-general} places the structured join problem beside balance-constrained matching and sampling formulations in which one optimizes an additive criterion subject to sample-level restrictions \citep{Zubizarreta2012,DevilleSarndal1992,DevilleTille2004}. It also clarifies the exact scope of the penalty--constraint connection used in the paper: every penalized optimum is a constrained optimum at the coherence level it attains. The converse does not automatically hold without additional regularity.
+
+A minimal misspecification inequality follows immediately.
+
+\begin{proposition}[When the additive optimum is not the analyst's optimum]
+\label{prop:dominance-general}
+Let $J_0,J_1\in\mathcal{J}$ satisfy $S(J_0)>S(J_1)$ and $\Psi\bigl(T(J_1)\bigr)>\Psi\bigl(T(J_0)\bigr)$. Then $J_1$ is preferred by the penalized objective \eqref{eq:penalized-general} whenever
+\begin{equation}
+\lambda>
+\frac{S(J_0)-S(J_1)}{\Psi\bigl(T(J_1)\bigr)-\Psi\bigl(T(J_0)\bigr)}.
+\label{eq:dominance-threshold}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Subtract the two penalized objectives:
+\[
+U_\lambda(J_1)-U_\lambda(J_0)
+=
+\bigl(S(J_1)-S(J_0)\bigr)
++
+\lambda\Bigl(\Psi\bigl(T(J_1)\bigr)-\Psi\bigl(T(J_0)\bigr)\Bigr).
+\]
+The right-hand side is positive exactly when \eqref{eq:dominance-threshold} holds.
+\end{proof}
+
+Proposition~\ref{prop:dominance-general} is elementary, but it isolates the central point of the paper. Solving the wrong problem exactly does not recover the right answer. Exact optimization of the additive surrogate is compatible with strict suboptimality for the analyst's actual objective.
+
+\subsection{Error cascades under one-to-one matching}
+
+The one-to-one case contains another structural fact that pairwise scoring obscures: disagreements with the truth are combinatorially coupled.
+
+Specialize now to equal-size one-to-one linkage. Let $\Sigma_n$ denote the set of permutations of $[n]$, and let $\sigma^\star\in\Sigma_n$ denote the true bijection. For any candidate linkage $\sigma\in\Sigma_n$, define the disagreement set
+\[
+D(\sigma,\sigma^\star)=\{i\in[n]:\sigma(i)\neq \sigma^\star(i)\}.
+\]
+
+\begin{proposition}[Cascade structure of one-to-one disagreements]
+\label{prop:cycles}
+For any $\sigma,\sigma^\star\in\Sigma_n$, the disagreement set $D(\sigma,\sigma^\star)$ decomposes into disjoint cycles of length at least $2$. In particular, if $\sigma\neq \sigma^\star$, then $|D(\sigma,\sigma^\star)|\ge 2$.
+\end{proposition}
+
+\begin{proof}
+Consider the permutation $\tau=(\sigma^\star)^{-1}\circ\sigma$ on $[n]$. The indices fixed by $\tau$ are exactly those for which $\sigma(i)=\sigma^\star(i)$. Every finite permutation decomposes into disjoint cycles, and every non-fixed point belongs to a cycle of length at least $2$. The disagreement set is therefore the union of those nontrivial cycles.
+\end{proof}
+
+Proposition~\ref{prop:cycles} does not say that linkage errors are probabilistically independent or dependent. It says something more basic: under bijectivity, they cannot arise one at a time. A mistaken assignment necessarily displaces at least one more record. In structured linkage problems the cascade can be much larger: one bad household link, one broken foreign key, or one inconsistent temporal match can force a chain of compensating errors elsewhere in the table.
+
+\section{The finite selection model and when it helps}
+\label{sec:fsm}
+
+\subsection{FSM as a general principle}
+
+Morris's finite selection model was introduced for experimental design in the RAND Health Insurance Experiment \citep{Morris1979,Newhouse1993}. There is a finite ground set of units, a feasible family of allocations, and a global design criterion. Treatment groups take turns selecting units in a fair random order. On each turn, the active group chooses the available unit that most improves the common criterion. The recent reformulation by \citet{Chattopadhyay2026} makes explicit that the important object is the incremental gain in a \emph{global} criterion, not an isolated unit score.
+
+Write $\mathcal{U}$ for a finite ground set and $\mathcal{F}\subseteq 2^{\mathcal{U}}$ for the feasible family. Let $Q:\mathcal{F}\to\mathbb{R}$ be the objective. The FSM constructs a selection $X\in\mathcal{F}$ sequentially. At step $t$, with partial selection $X_t$, the next admissible element is evaluated by its incremental contribution
+\[
+\Delta_Q(u\mid X_t)=Q(X_t\cup\{u\})-Q(X_t).
+\]
+If $Q$ is additive, then $\Delta_Q(u\mid X_t)$ does not depend on $X_t$ and the problem collapses to ordinary scoring. The only reason to invoke FSM thinking is that the value of $u$ depends on the current partial selection.
+
+That principle carries over directly to linkage. The ground set can be candidate record links, candidate block matches, or tuples in a multiway join. The feasible family encodes one-to-one, hierarchical, calibration, or consistency restrictions. The criterion can be the penalized or constrained objective from Section~\ref{sec:selection}. Randomized turn-taking is essential in experiments because design validity itself depends on randomization. In linkage, randomness is optional. What matters is the conceptual move from independent pairwise scoring to incremental evaluation against a table-level criterion.
+
+The present paper does not implement a literal randomized FSM. We use an exact structured optimizer in the household example so that the comparison isolates \emph{objective choice} rather than approximation error. An FSM-style sequential algorithm would be the natural next step when exact optimization over the structured feasible set is computationally infeasible.
+
+\subsection{When a structured criterion can reduce bias}
+
+To state when a structured criterion can help downstream inference, let $U_i^\star$ denote the analysis label for record $i$ under the true join. Depending on the application, $U_i^\star$ may be a household identifier, a treatment label, a classroom identifier, a time index, a foreign-key parent, or some other attribute imported through linkage. Under a candidate join $J$, let $\widetilde U_i(J)$ denote the label induced by the linked table $T(J)$.
+
+Suppose the analyst's target is
+\begin{equation}
+\theta^\star=\frac{1}{n}\sum_{i=1}^n q\bigl(Y_i,U_i^\star\bigr),
+\label{eq:target-general}
+\end{equation}
+and the linked-table analogue is
+\begin{equation}
+\theta(J)=\frac{1}{n}\sum_{i=1}^n q\bigl(Y_i,\widetilde U_i(J)\bigr).
+\label{eq:linked-general}
+\end{equation}
+Assume there is a metric $\rho$ on the label space and a constant $L<\infty$ such that
+\begin{equation}
+\bigl|q(y,u)-q(y,u')\bigr|\le L|y|\,\rho(u,u')
+\qquad\text{for all }y,u,u'.
+\label{eq:lipschitz-q}
+\end{equation}
+
+\begin{proposition}[Bias is bounded by distortion in analysis labels]
+\label{prop:bias-bound}
+Under \eqref{eq:target-general}--\eqref{eq:lipschitz-q},
+\begin{equation}
+\bigl|\theta(J)-\theta^\star\bigr|
+\le
+\frac{L}{n}\sum_{i=1}^n |Y_i|\,\rho\bigl(\widetilde U_i(J),U_i^\star\bigr).
+\label{eq:bias-bound}
+\end{equation}
+Consequently, for any random linkage rule $R$ producing $J_R$,
+\begin{equation}
+\bigl|\mathbb{E}[\theta(J_R)]-\theta^\star\bigr|
+\le
+\frac{L}{n}\sum_{i=1}^n \mathbb{E}\Bigl[|Y_i|\,\rho\bigl(\widetilde U_i(J_R),U_i^\star\bigr)\Bigr].
+\label{eq:bias-bound-random}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Using the triangle inequality and \eqref{eq:lipschitz-q},
+\[
+\bigl|\theta(J)-\theta^\star\bigr|
+\le
+\frac{1}{n}\sum_{i=1}^n
+\bigl|q\bigl(Y_i,\widetilde U_i(J)\bigr)-q\bigl(Y_i,U_i^\star\bigr)\bigr|
+\le
+\frac{L}{n}\sum_{i=1}^n |Y_i|\,\rho\bigl(\widetilde U_i(J),U_i^\star\bigr),
+\]
+which gives \eqref{eq:bias-bound}. Taking expectations yields \eqref{eq:bias-bound-random}.
+\end{proof}
+
+Proposition~\ref{prop:bias-bound} states the condition transparently. A structured or FSM-style rule can lower an upper bound on downstream bias when it reduces distortion in the analysis labels that enter the estimand. It need not help when the added structure is irrelevant to the estimand, unavailable, or misspecified.
+
+In the simplest case, if a wrong join only changes a binary analysis label and outcomes are linear in that label, bias is controlled directly by how often the join changes the label.
+
+\begin{corollary}[Binary label misclassification and attenuation]
+\label{cor:attenuation}
+Suppose $U_i^\star=Z_i\in\{0,1\}$ is a balanced binary label, $\widetilde U_i(J)=W_i(J)$, and outcomes satisfy
+\begin{equation}
+Y_i=\alpha+\tau Z_i+u_i,
+\qquad \mathbb{E}[u_i\mid Z_i]=0.
+\label{eq:outcome-model-general}
+\end{equation}
+Assume $W_i(J_R)=Z_i\oplus E_i$ under linkage rule $R$, where $E_i\sim\mathrm{Bernoulli}(\varepsilon_R)$ is independent of $(Z_i,u_i)$ and $\oplus$ denotes exclusive OR. Then the linked difference-in-means estimator based on $W_i(J_R)$ satisfies
+\begin{equation}
+\mathbb{E}[\hat\tau_R]=(1-2\varepsilon_R)\tau.
+\label{eq:attenuation-general}
+\end{equation}
+Hence any linkage rule with a smaller induced misclassification rate $\varepsilon_R$ is less biased in absolute value.
+\end{corollary}
+
+\begin{proof}
+Under balance and symmetric misclassification,
+\[
+\Pr(Z_i=1\mid W_i=1)=1-\varepsilon_R,
+\qquad
+\Pr(Z_i=1\mid W_i=0)=\varepsilon_R.
+\]
+Therefore
+\[
+\mathbb{E}[Y_i\mid W_i=1]-\mathbb{E}[Y_i\mid W_i=0]
+=
+\tau\bigl((1-\varepsilon_R)-\varepsilon_R\bigr)
+=
+(1-2\varepsilon_R)\tau.
+\]
+\end{proof}
+
+\begin{remark}
+Corollary~\ref{cor:attenuation} is deliberately narrow. It relies on a balanced binary label, a linear outcome model, and symmetric misclassification. Outside that setting, linkage error need not attenuate. With continuous labels, asymmetric mistakes, or more complex estimands, bias can move in either direction.
+\end{remark}
+
+\section{Three sources of non-separability in table linkage}
+\label{sec:taxonomy}
+
+The household example below is just one instance of a broader phenomenon. At least three recurring sources of non-separability appear in record linkage and data integration.
+
+\textbf{Hierarchical or relational structure.} Households, classrooms, firms with subsidiaries, orders with line items, parent--child tables, and entity-resolution clusters all impose structure above the individual record. In entity resolution this is the canonical issue: pairwise match decisions are followed by transitive closure or clustering, but transitivity is a property of the cluster, not of any one pair. Collective entity-resolution methods and correlation clustering make that non-separability explicit by optimizing over partitions or graphs rather than isolated pairs \citep{Christen2012,BansalBlumChawla2004}. Household linkage is a matched-block version of the same problem.
+
+\textbf{Distributional calibration.} Sometimes the linked file should reproduce known margins or moments: age distributions, school sizes, treatment shares, or other calibration totals. Those constraints are free information about the target table. Ignoring them and maximizing an unconstrained additive score wastes information in exactly the way that ignoring auxiliary covariates wastes information in sampling or matching. Calibration estimators, entropy balancing, and the cube method all solve this kind of problem by enforcing sample-level balance, not unit-level fit \citep{DevilleSarndal1992,Hainmueller2012,DevilleTille2004}. A \emph{calibrated join} is the analogous object for linkage.
+
+\textbf{Cross-table or temporal consistency.} Real integrations rarely stop at one two-table join. If $A$ is linked to $B$ and $B$ to $C$, then the implied $A$--$C$ relation should make sense. Likewise, person-period joins in panels should preserve feasible temporal sequences. These are consistency conditions across joins or across time. They are non-separable even when each component join is one-to-one.
+
+Across all three cases, the common failure mode is the same. A flat pairwise score is used to optimize an objective that actually lives on the output table. The more informative the higher-order structure, the more costly that misspecification can be.
+
+\section{A worked household example}
+\label{sec:households}
+
+Households are a useful worked example because they make the mismatch between optimization and analysis especially transparent. The join is selected person by person, but the downstream analysis imports a household-level label.
+
+\subsection{Exact household-preserving linkage}
+
+Suppose the records in each file are partitioned into households,
+\[
+\mathcal{G}_A=\{g_1,\dots,g_K\},
+\qquad
+\mathcal{G}_B=\{h_1,\dots,h_K\},
+\]
+with compatible household sizes. The exact household-preserving feasible family consists of those one-to-one linkages that map each $g_k$ entirely into one $h_\ell$.
+
+For any admissible household pair $(g_k,h_\ell)$, define the compatibility score
+\begin{equation}
+C_{k\ell}
+=
+\max_{\varphi\in\Pi(g_k,h_\ell)}
+\sum_{i\in g_k} s_{i,\varphi(i)},
+\label{eq:compatibility-household}
+\end{equation}
+where $\Pi(g_k,h_\ell)$ is the set of bijections from members of $g_k$ to members of $h_\ell$.
+
+\begin{proposition}[Decomposition of the exact household-preserving optimum]
+\label{prop:decompose-household}
+The exact household-preserving additive problem is equivalent to the household-level assignment
+\begin{equation}
+\max_{\pi\in\Sigma_K}
+\sum_{k=1}^K C_{k,\pi(k)}.
+\label{eq:household-level-problem}
+\end{equation}
+An optimizer of the person-level problem is obtained by solving \eqref{eq:household-level-problem} and then using, within each matched household pair $(g_k,h_{\pi(k)})$, the bijection that attains $C_{k,\pi(k)}$.
+\end{proposition}
+
+\begin{proof}
+Any household-preserving person-level bijection can be written as a household permutation $\pi\in\Sigma_K$ together with within-household bijections $\varphi_k\in\Pi(g_k,h_{\pi(k)})$. The additive score therefore decomposes as
+\[
+\sum_{k=1}^K\sum_{i\in g_k} s_{i,\varphi_k(i)}.
+\]
+For a fixed $\pi$, the terms indexed by $k$ are independent, so each is maximized by $C_{k,\pi(k)}$. Maximizing over $\pi$ yields \eqref{eq:household-level-problem}.
+\end{proof}
+
+Proposition~\ref{prop:decompose-household} is why the benchmark in the simulation is useful. It is not a heuristic household-first rule. It is the exact optimizer of the additive score over the structurally correct feasible set.
+
+\subsection{A motivated two-household example}
+
+The mechanism appears in the smallest nontrivial case. Let file $A$ contain households $g_1=\{a_1,a_2\}$ and $g_2=\{a_3,a_4\}$, and let file $B$ contain $h_1=\{b_1,b_2\}$ and $h_2=\{b_3,b_4\}$. Suppose the true correspondence is $g_1\leftrightarrow h_1$ and $g_2\leftrightarrow h_2$, but one member in each household has a particularly plausible decoy in the neighboring household. A person-level score matrix of that form is
+\begin{equation}
+\label{eq:toy-matrix-household}
+\begin{pmatrix}
+0.95 & 0.04 & 0.07 & 0.10 \\
+0.05 & 0.92 & 0.06 & 1.01 \\
+0.08 & 0.07 & 0.94 & 0.06 \\
+0.09 & 1.00 & 0.05 & 0.93
+\end{pmatrix}.
+\end{equation}
+
+The additive optimizer prefers the crossover assignment
+\[
+a_1\mapsto b_1,
+\qquad
+a_2\mapsto b_4,
+\qquad
+a_3\mapsto b_3,
+\qquad
+a_4\mapsto b_2,
+\]
+with score $3.90$, over the household-preserving identity assignment with score $3.74$. So this is a genuine case in which the additive optimizer sacrifices the analyst's objective in order to gain pairwise score.
+
+Now suppose the downstream analysis imports a household treatment label from file $B$. If household $g_1$ is treated and $g_2$ is control, the crossover join swaps one treated and one control label. In the balanced symmetric setting of Corollary~\ref{cor:attenuation}, that induced misclassification attenuates the linked treatment effect. The point of the example is not that all linkage error attenuates. It is that small pairwise gains can be inferentially costly once the analysis label lives at household level.
+
+\subsection{Local ambiguity and household breakage}
+
+To connect the example to ambiguity sweeps, consider one file-$A$ household $g=\{a_1,\dots,a_m\}$ with true counterpart $h=\{b_1,\dots,b_m\}$ and a nearby decoy household $h'=\{b_1',\dots,b_m'\}$. For role $r$, define the margin
+\begin{equation}
+D_r(\alpha)=s(a_r,b_r)-s(a_r,b_r'),
+\label{eq:role-margin-household}
+\end{equation}
+where $\alpha$ indexes ambiguity. Positive $D_r(\alpha)$ means the true within-household candidate looks better than the decoy for role $r$.
+
+Assume the local block is role-aligned, so exact household recovery occurs if and only if every role prefers the true candidate. This gives a direct link between person-level ambiguity and household breakage.
+
+\begin{proposition}[Local household crossover probability]
+\label{prop:crossover-household}
+Suppose $D_1(\alpha),\dots,D_m(\alpha)$ are independent with common distribution function $F_\alpha$. Then
+\begin{equation}
+\Pr_\alpha\bigl(\text{exact recovery of }g\bigr)=\bigl[1-F_\alpha(0)\bigr]^m,
+\label{eq:exact-recovery-household}
+\end{equation}
+so
+\begin{equation}
+\Pr_\alpha\bigl(\text{household }g\text{ is broken}\bigr)=1-\bigl[1-F_\alpha(0)\bigr]^m.
+\label{eq:crossover-prob-household}
+\end{equation}
+If additionally $D_r(\alpha)\sim N\!\bigl(\mu(\alpha),\sigma^2(\alpha)\bigr)$, then
+\begin{equation}
+\Pr_\alpha\bigl(\text{household }g\text{ is broken}\bigr)
+=
+1-\Phi\!\left(\frac{\mu(\alpha)}{\sigma(\alpha)}\right)^m.
+\label{eq:gaussian-crossover-household}
+\end{equation}
+Hence household breakage rises with ambiguity whenever $\mu(\alpha)/\sigma(\alpha)$ falls with $\alpha$, and it rises with household size $m$ for any fixed nondegenerate ambiguity level.
+\end{proposition}
+
+\begin{proof}
+Exact recovery requires $D_r(\alpha)>0$ for all $r=1,\dots,m$. Independence yields
+\[
+\Pr_\alpha\bigl(D_1(\alpha)>0,\dots,D_m(\alpha)>0\bigr)
+=
+\prod_{r=1}^m \Pr_\alpha\bigl(D_r(\alpha)>0\bigr)
+=
+\bigl[1-F_\alpha(0)\bigr]^m.
+\]
+The second claim follows by complementing, and the Gaussian formula follows by evaluating the one-dimensional probability with $\Phi$.
+\end{proof}
+
+This result is deliberately local. It is not a theorem about arbitrary global Hungarian assignments. Its role is narrower: it explains why exact household recovery can deteriorate much faster than person-level accuracy once nearby decoys become plausible.
+
+\section{Simulation design}
+\label{sec:simulation}
+
+The simulation is intentionally specific because the goal is to illustrate the general argument in one clean setting. Each replication generates 70 latent two-person households. Households are paired into ambiguity clusters so that nearby households share similar surname-like and age-like latent characteristics. Within each household a binary treatment $Z_h$ is drawn with probability $1/2$ and inherited by both members. Outcomes follow
+\[
+Y_{hr}=20+6Z_h+0.5\,\mathrm{Age}_{hr}+\varepsilon_{hr},
+\]
+with Gaussian noise.
+
+Two observed files are generated from the same latent population. File $A$ is relatively clean and carries the outcome. File $B$ is noisier and carries the treatment label used in downstream estimation. Both files contain noisy surname, first-name, and age variables. An ambiguity parameter controls how similar neighboring households look in the observed linkage space.
+
+All methods use the same person-level score matrix,
+\[
+s_{ij}=-1.5\,|\text{surname}_i-\text{surname}_j|-1.2\,|\text{fname}_i-\text{fname}_j|-0.35\,|\text{age}_i-\text{age}_j|.
+\]
+We compare three procedures:
+\begin{description}[leftmargin=1.5em]
+    \item[Greedy person-level.] Select the highest-scoring remaining person pair at each step.
+    \item[Hungarian person-level.] Solve the additive assignment problem exactly.
+    \item[Structured exact optimizer.] Build the household compatibility matrix from \eqref{eq:compatibility-household}, solve the household-level assignment \eqref{eq:household-level-problem}, and recover the implied within-household matches.
+\end{description}
+
+The evaluation metrics follow the theory:
+\begin{enumerate}[leftmargin=1.5em]
+    \item \textbf{Person accuracy}: the share of persons linked to their true counterpart.
+    \item \textbf{Exact household recovery}: the share of file-$A$ households whose members are both linked to the correct file-$B$ household.
+    \item \textbf{Absolute bias}: the absolute error of the linked estimator
+    \[
+    \hat\tau(J)=\bar Y_{W(J)=1}-\bar Y_{W(J)=0},
+    \]
+    where $W(J)$ is the treatment label imported from file $B$ under join $J$.
+\end{enumerate}
+
+Baseline results use ambiguity level 1.5 with 150 Monte Carlo replications. The ambiguity sweep uses levels 0.5, 1.0, 1.5, 2.0, and 2.5 with 60 replications each. The script \texttt{scripts/generate\_results.py} reproduces every table and figure.
+
+\section{Results}
+\label{sec:results}
+
+Table~\ref{tab:baseline} reports the baseline comparison. Standard errors across replications appear in parentheses.
+
+\begin{table}[htbp]
+\centering
+\caption{Baseline simulation results at ambiguity level 1.5.}
+\label{tab:baseline}
+\input{tables/tab_baseline_metrics.tex}
+\end{table}
+
+The first comparison is algorithmic: Hungarian improves on greedy linkage because it solves the additive person-level objective exactly. The second comparison is substantive: relative to Hungarian, the structured optimizer improves person-level accuracy by \PersonGainVsHungarian{}, improves exact household recovery by \HHGainVsHungarian{}, and reduces absolute bias by \BiasReductionVsHungarian{} points.
+
+Those gains line up with the theory. Proposition~\ref{prop:decompose-household} says that once households define the relevant feasible set, the right exact benchmark is a household-level assignment, not a person-level one. Proposition~\ref{prop:crossover-household} says that household recovery compounds person-level ambiguity multiplicatively. Corollary~\ref{cor:attenuation} says that, in the binary symmetric setup used here, reducing induced treatment-label misclassification lowers downstream bias. The simulation turns those statements into magnitudes.
+
+Figure~\ref{fig:hh-sweep} plots exact household recovery across the ambiguity sweep. Figure~\ref{fig:bias-sweep} plots absolute downstream bias.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.82\textwidth]{figures/fig_sweep_household_exact.pdf}
+\caption{Exact household recovery as a function of ambiguity. All methods degrade as ambiguity rises, but the structured optimizer retains a large advantage throughout.}
+\label{fig:hh-sweep}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.82\textwidth]{figures/fig_sweep_bias.pdf}
+\caption{Absolute downstream bias across the ambiguity sweep. The structured optimizer dominates throughout, with the advantage widening as the join becomes harder.}
+\label{fig:bias-sweep}
+\end{figure}
+
+At low ambiguity, the pairwise surrogate is often close to the structured problem, so the gap is moderate. As ambiguity rises, cross-household temptations become more common and exact household recovery deteriorates much faster for the person-level procedures. The structured optimizer also maintains a clear advantage in downstream bias throughout the sweep.
+
+These differences are not generated by richer pairwise features or by tuning. All three procedures use the same underlying record-level score matrix. What changes is whether the optimizer is permitted to spend pairwise score by damaging a property of the linked table that the downstream analysis actually uses.
+
+\section{Discussion}
+
+The paper's main claim is general: many joins are better understood as selection problems over feasible linked tables than as additive optimization over candidate pairs. Households are one clean example because the gap between person-level optimization and household-level analysis is easy to see, but the same logic applies to table integration problems throughout statistics and computer science.
+
+Three practical implications follow.
+
+First, linkage should be designed against the downstream estimand, not against pairwise accuracy alone. Pairwise precision and recall can be high while the analysis labels in the linked table are badly distorted. Proposition~\ref{prop:bias-bound} and Corollary~\ref{cor:attenuation} make that distinction explicit.
+
+Second, higher-order constraints are information, not inconvenience. If the output table should preserve a hierarchy, satisfy calibration totals, or remain consistent across composed joins, that information can and should be used by the optimizer. Ignoring it is analogous to ignoring covariates in experimental design or auxiliary variables in survey sampling.
+
+Third, the computer-science lesson is broader than linkage alone. The paper is really about decomposable versus non-decomposable objectives in combinatorial optimization for data integration. When the true objective has block structure, graph structure, calibration constraints, or compositional consistency, optimizing a flat additive relaxation and hoping the structure emerges is a gamble. Hierarchical assignment, constrained optimization, and FSM-style sequential selection are three ways to respect the object that actually matters.
+
+That said, structure is not automatically beneficial. It helps when the added information is both \emph{known} and \emph{aligned} with the analyst's loss function. If the structure is irrelevant to the estimand, weakly informative, or misspecified, enforcing it can add variance or even increase bias. The lesson is not that all linkage should be household-aware, calibration-aware, or temporally constrained. The lesson is that the relevant table-level criterion should be stated explicitly and then optimized on purpose.
+
+\section{Reproducibility}
+
+The project folder contains a single script, \texttt{scripts/generate\_results.py}, that reproduces every table and figure included in this paper. Running the script writes CSV summaries to \texttt{results/}, \LaTeX{} table fragments to \texttt{tables/}, and PDF figures to \texttt{figures/}. The \texttt{Makefile} compiles the paper. The bibliography is stored in \texttt{refs.bib}, with citation checks documented in \texttt{refs\_verified.md}.
+
+\printbibliography
+
+\end{document}

@@ -43,9 +43,7 @@ class CalibrationSpec:
         for var, dist in self.margins.items():
             total = sum(dist.values())
             if abs(total - 1.0) > 0.01:
-                raise ValueError(
-                    f"Margins for '{var}' sum to {total}, expected ~1.0"
-                )
+                raise ValueError(f"Margins for '{var}' sum to {total}, expected ~1.0")
 
     @classmethod
     def from_dataframe(

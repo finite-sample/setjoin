@@ -170,9 +170,7 @@ class MatchReport:
             src_indices = self.source_groups[src_gid]
             tgt_indices = self.target_groups[tgt_gid]
 
-            within_score = float(
-                self.scores[np.ix_(src_indices, tgt_indices)].sum()
-            )
+            within_score = float(self.scores[np.ix_(src_indices, tgt_indices)].sum())
 
             best_alt_score = float("-inf")
             for alt_tgt_gid, alt_tgt_indices in self.target_groups.items():

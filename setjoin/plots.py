@@ -181,7 +181,9 @@ def plot_confidence_distribution(
 
     ax.hist(margins, bins=30, edgecolor="black")
     median_val = margins.median()
-    ax.axvline(median_val, color="red", linestyle="--", label=f"Median: {median_val:.2f}")  # noqa: E501
+    ax.axvline(
+        median_val, color="red", linestyle="--", label=f"Median: {median_val:.2f}"
+    )  # noqa: E501
 
     ax.set_xlabel("Margin (score - second best)")
     ax.set_ylabel("Count")

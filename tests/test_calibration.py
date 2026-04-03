@@ -61,9 +61,7 @@ class TestRakeWeights:
         assert iterations == 0
 
     def test_hits_target_margins(self) -> None:
-        df = pd.DataFrame(
-            {"age": [0, 0, 0, 0, 1, 1, 1, 1, 1, 1], "idx": range(10)}
-        )
+        df = pd.DataFrame({"age": [0, 0, 0, 0, 1, 1, 1, 1, 1, 1], "idx": range(10)})
         matches = [(i, i) for i in range(10)]
 
         spec = CalibrationSpec(
@@ -161,9 +159,7 @@ class TestCalibratedMatch:
             tolerance=0.05,
         )
 
-        result = calibrated_match(
-            scores, source_df, spec, hierarchy=hierarchy
-        )
+        result = calibrated_match(scores, source_df, spec, hierarchy=hierarchy)
 
         assert result.group_assignments is not None
         assert len(result.group_assignments) == 2
