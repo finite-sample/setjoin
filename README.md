@@ -1,5 +1,10 @@
 # setjoin
 
+[![PyPI version](https://img.shields.io/pypi/v/setjoin.svg)](https://pypi.org/project/setjoin/)
+[![Python versions](https://img.shields.io/pypi/pyversions/setjoin.svg)](https://pypi.org/project/setjoin/)
+[![License](https://img.shields.io/pypi/l/setjoin.svg)](https://github.com/finite-sample/setjoin/blob/main/LICENSE)
+[![CI](https://github.com/finite-sample/setjoin/actions/workflows/ci.yml/badge.svg)](https://github.com/finite-sample/setjoin/actions/workflows/ci.yml)
+
 Record linkage that keeps groups together. Match persons while preserving household membership, students while respecting school assignments, or any hierarchical data where group integrity matters.
 
 ## The Problem

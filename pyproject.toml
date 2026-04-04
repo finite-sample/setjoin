@@ -49,10 +49,10 @@ docs = [
 all = ["setjoin[viz,dev,docs]"]
 
 [project.urls]
-Homepage = "https://github.com/soodoku/setjoin"
-Documentation = "https://soodoku.github.io/setjoin"
-Repository = "https://github.com/soodoku/setjoin"
-Issues = "https://github.com/soodoku/setjoin/issues"
+Homepage = "https://github.com/finite-sample/setjoin"
+Documentation = "https://finite-sample.github.io/setjoin"
+Repository = "https://github.com/finite-sample/setjoin"
+Issues = "https://github.com/finite-sample/setjoin/issues"
 
 [build-system]
 requires = ["hatchling"]
