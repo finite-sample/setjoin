@@ -44,7 +44,7 @@ class HierarchySpec:
             target_group_col: Column name containing group IDs in target
 
         Returns:
-            HierarchySpec with group mappings
+            HierarchySpec: Group mappings
         """
         source_groups: dict[int, Sequence[int]] = {}
         for group_id, group_df in source.groupby(source_group_col):
@@ -70,7 +70,7 @@ class HierarchySpec:
             target_groupby: GroupBy object for target records
 
         Returns:
-            HierarchySpec with group mappings
+            HierarchySpec: Group mappings
         """
         source_groups: dict[int, Sequence[int]] = {}
         for group_id, group_df in source_groupby:
@@ -135,10 +135,8 @@ def compute_group_score_matrix(
             (shape: n_source_records x n_target_records)
 
     Returns:
-        Tuple of:
-        - Group score matrix (n_source_groups x n_target_groups)
-        - Dictionary mapping (source_group_id, target_group_id) to list of
-          (source_record_idx, target_record_idx) pairs from optimal assignment
+        tuple[NDArray[np.float64], dict[tuple[int, int], list[tuple[int, int]]]]:
+            Group score matrix and within-group match assignments
     """
     from scipy.optimize import linear_sum_assignment
 
@@ -189,8 +187,8 @@ def decompose_by_size(
         hierarchy: HierarchySpec defining group structure
 
     Returns:
-        Dictionary mapping (source_size, target_size) to
-        (list of source group IDs, list of target group IDs)
+        dict[tuple[int, int], tuple[list[int], list[int]]]:
+            Size pairs to group ID lists
     """
     source_sizes = hierarchy.source_group_sizes()
     target_sizes = hierarchy.target_group_sizes()

@@ -38,6 +38,9 @@ dev = [
     "mypy>=1.8",
     "ruff>=0.4",
     "pandas-stubs>=2.0",
+    "vulture>=2.11",
+    "bandit>=1.7",
+    "pydoclint>=0.5",
 ]
 docs = [
     "sphinx>=7.2",
@@ -78,3 +81,18 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+
+[tool.vulture]
+paths = ["setjoin"]
+min_confidence = 95
+
+[tool.bandit]
+targets = ["setjoin"]
+skips = []
+
+[tool.pydoclint]
+style = "google"
+arg-type-hints-in-docstring = false
+arg-type-hints-in-signature = true
+check-return-types = true
+check-yield-types = true

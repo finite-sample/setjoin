@@ -132,19 +132,18 @@ COMPARATORS: dict[str, ComparatorType] = {
 
 
 class Scorer:
-    """Configurable scorer for computing pairwise similarity between records."""
+    """
+    Configurable scorer for computing pairwise similarity between records.
+
+    Args:
+        config: Mapping from field name to configuration.
+            Each value can be a FieldConfig or a dict with keys:
+            - weight: float (default 1.0)
+            - comparator: str (default "exact")
+            - missing_value: float (default 0.0)
+    """
 
     def __init__(self, config: dict[str, dict[str, float | str] | FieldConfig]) -> None:
-        """
-        Initialize scorer with field configurations.
-
-        Args:
-            config: Mapping from field name to configuration.
-                    Each value can be a FieldConfig or a dict with keys:
-                    - weight: float (default 1.0)
-                    - comparator: str (default "exact")
-                    - missing_value: float (default 0.0)
-        """
         self.fields: dict[str, FieldConfig] = {}
         for name, cfg in config.items():
             if isinstance(cfg, FieldConfig):
@@ -173,7 +172,10 @@ class Scorer:
             target_suffix: Suffix to append to field names for target columns
 
         Returns:
-            Score matrix of shape (len(source), len(target))
+            ScoreMatrix: Score matrix of shape (len(source), len(target))
+
+        Raises:
+            ValueError: If field not found or unknown comparator
         """
         n_source, n_target = len(source), len(target)
         total_score = np.zeros((n_source, n_target), dtype=np.float64)
@@ -234,7 +236,7 @@ def score_matrix(
         comparators: Optional mapping from field name to comparator name
 
     Returns:
-        Score matrix of shape (len(source), len(target))
+        ScoreMatrix: Score matrix of shape (len(source), len(target))
     """
     comparators = comparators or {}
     config: dict[str, dict[str, float | str] | FieldConfig] = {

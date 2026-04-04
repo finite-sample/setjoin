@@ -63,7 +63,7 @@ class CalibrationSpec:
             max_iterations: Maximum raking iterations
 
         Returns:
-            CalibrationSpec with marginal distributions from df
+            CalibrationSpec: Marginal distributions from df
         """
         margins: dict[str, dict[object, float]] = {}
         for col in columns:
@@ -129,10 +129,11 @@ def rake_weights(
         calibration: Target marginal distributions
 
     Returns:
-        Tuple of:
-        - Weights array (one per match)
-        - Dictionary of achieved proportions per variable
-        - Number of iterations used
+        tuple[NDArray[np.float64], dict[str, dict[object, float]], int]:
+            Weights array, achieved proportions, and iterations used
+
+    Raises:
+        ValueError: If calibration variable not in source DataFrame
     """
     if not matches:
         return np.array([], dtype=np.float64), {}, 0
@@ -206,7 +207,7 @@ def calibrated_match(
         show_progress: Whether to show progress bar
 
     Returns:
-        CalibratedMatchResult with matches and calibration weights
+        CalibratedMatchResult: Matches with calibration weights
     """
     if hierarchy is not None:
         base_result = structure_aware_match(
@@ -247,7 +248,7 @@ def compute_calibration_penalty(
         calibration: Target marginal distributions
 
     Returns:
-        Sum of squared deviations from target proportions
+        float: Sum of squared deviations from target proportions
     """
     if not source_indices:
         return float("inf")

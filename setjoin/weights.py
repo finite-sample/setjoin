@@ -70,7 +70,7 @@ class MatchWeights:
             threshold: Minimum weight to include
 
         Returns:
-            List of (target_idx, weight) tuples
+            list[tuple[int, float]]: (target_idx, weight) tuples
         """
         row = self.matrix[source_idx]
         mask = row > threshold
@@ -85,7 +85,7 @@ class MatchWeights:
             threshold: Minimum weight to count as a match
 
         Returns:
-            List of (source_idx, target_idx) pairs
+            list[tuple[int, int]]: (source_idx, target_idx) pairs
         """
         matches = []
         used_targets: set[int] = set()
@@ -105,7 +105,7 @@ class MatchWeights:
         This uses the soft weights as scores for optimal assignment.
 
         Returns:
-            List of (source_idx, target_idx) pairs
+            list[tuple[int, int]]: (source_idx, target_idx) pairs
         """
         from scipy.optimize import linear_sum_assignment
 
@@ -120,7 +120,7 @@ class MatchWeights:
             scores: Original pairwise score matrix
 
         Returns:
-            Sum of weight * score over all pairs
+            float: Sum of weight * score over all pairs
         """
         return float((self.matrix * scores).sum())
 
@@ -151,7 +151,7 @@ def soft_match(
             When provided, applies Sinkhorn at group level first.
 
     Returns:
-        MatchWeights with soft assignment matrix
+        MatchWeights: Soft assignment matrix
     """
     if hierarchy is not None:
         return _soft_match_hierarchical(
@@ -316,7 +316,7 @@ def soft_match_with_calibration(
         hierarchy: Optional hierarchy for structure-aware matching
 
     Returns:
-        MatchWeights with calibration-aware soft assignment
+        MatchWeights: Calibration-aware soft assignment
     """
     n_source = scores.shape[0]
     calibration_bonus = np.zeros(n_source, dtype=np.float64)

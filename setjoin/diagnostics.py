@@ -372,7 +372,7 @@ def evaluate_matches(
         target_group_col: Optional column for group coherence metrics
 
     Returns:
-        Dictionary of metrics
+        dict[str, float]: Evaluation metrics
     """
     correct = 0
     for src_idx, tgt_idx in matches:

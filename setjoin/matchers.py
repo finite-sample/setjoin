@@ -19,7 +19,7 @@ def greedy_match(
         show_progress: Whether to show progress bar
 
     Returns:
-        MatchResult with greedy matches
+        MatchResult: Greedy matches
     """
     n, m = scores.shape
     triples = [(i, j, scores[i, j]) for i in range(n) for j in range(m)]
@@ -57,7 +57,7 @@ def hungarian_match(
         scores: Pairwise score matrix (n_source x n_target)
 
     Returns:
-        MatchResult with optimal global assignment
+        MatchResult: Optimal global assignment
     """
     rows, cols = linear_sum_assignment(-scores)
     matches = list(zip(rows.tolist(), cols.tolist(), strict=True))
@@ -88,7 +88,7 @@ def structure_aware_match(
         show_progress: Whether to show progress bar
 
     Returns:
-        MatchResult with structure-preserving matches
+        MatchResult: Structure-preserving matches
     """
     group_scores, within_matches = compute_group_score_matrix(hierarchy, scores)
 
@@ -140,7 +140,7 @@ def match(
         show_progress: Whether to show progress bar
 
     Returns:
-        MatchResult with matches
+        MatchResult: Matches using specified method
 
     Raises:
         ValueError: If method is unknown or hierarchy missing for structure_aware
@@ -173,7 +173,7 @@ def compare_methods(
         methods: List of methods to run (default: all available)
 
     Returns:
-        Dictionary mapping method name to MatchResult
+        dict[str, MatchResult]: Method name to result mapping
     """
     if methods is None:
         methods = ["greedy", "hungarian"]

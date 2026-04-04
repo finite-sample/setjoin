@@ -45,7 +45,7 @@ def plot_score_heatmap(
         mark_matches: Whether to mark matched pairs
 
     Returns:
-        matplotlib Figure
+        Figure: Matplotlib figure with heatmap
     """
     plt = _get_plt()
 
@@ -86,7 +86,7 @@ def plot_match_comparison(
         ax: Optional matplotlib Axes
 
     Returns:
-        matplotlib Figure
+        Figure: Matplotlib figure with comparison
     """
     plt = _get_plt()
 
@@ -128,7 +128,10 @@ def plot_method_comparison_bar(
         ax: Optional matplotlib Axes
 
     Returns:
-        matplotlib Figure
+        Figure: Matplotlib figure with bar chart
+
+    Raises:
+        ValueError: If metric is unknown
     """
     plt = _get_plt()
 
@@ -167,7 +170,7 @@ def plot_confidence_distribution(
         ax: Optional matplotlib Axes
 
     Returns:
-        matplotlib Figure
+        Figure: Matplotlib figure with distribution
     """
     plt = _get_plt()
 
@@ -211,7 +214,7 @@ def plot_accuracy_by_ambiguity(
         ax: Optional matplotlib Axes
 
     Returns:
-        matplotlib Figure
+        Figure: Matplotlib figure with accuracy plot
     """
     _ = ambiguity_values
     plt = _get_plt()
