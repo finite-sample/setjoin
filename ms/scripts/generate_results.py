@@ -215,11 +215,14 @@ def write_macros(baseline_summary: pd.DataFrame, macro_path: Path) -> None:
         cmd("GreedyGroupExact", row_g["group_exact_mean"]),
         cmd("HungarianGroupExact", row_h["group_exact_mean"]),
         cmd("SetAwareGroupExact", row_s["group_exact_mean"]),
+        cmd("HungarianHHExact", row_h["group_exact_mean"]),
+        cmd("SetAwareHHExact", row_s["group_exact_mean"]),
         cmd("GreedyBias", row_g["abs_bias_mean"]),
         cmd("HungarianBias", row_h["abs_bias_mean"]),
         cmd("SetAwareBias", row_s["abs_bias_mean"]),
         cmd("PersonGainVsHungarian", row_s["person_accuracy_mean"] - row_h["person_accuracy_mean"]),
         cmd("GroupGainVsHungarian", row_s["group_exact_mean"] - row_h["group_exact_mean"]),
+        cmd("HHGainVsHungarian", row_s["group_exact_mean"] - row_h["group_exact_mean"]),
         cmd("BiasReductionVsHungarian", row_h["abs_bias_mean"] - row_s["abs_bias_mean"]),
     ]
     macro_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

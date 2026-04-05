@@ -67,3 +67,5 @@ Thumbs.db
 
 # uv
 uv.lock
+ms/main.bcf
+ms/main.run.xml
