@@ -1,500 +1,339 @@
-\documentclass[11pt]{article}
+\documentclass[12pt]{article}
 
 \usepackage[margin=1in]{geometry}
-\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{natbib}
 \usepackage{booktabs}
 \usepackage{graphicx}
-\usepackage[backend=biber,style=authoryear,natbib=true,maxcitenames=2,maxbibnames=99,doi=true,url=false,isbn=false,eprint=false]{biblatex}
-\usepackage{url}
 \usepackage{hyperref}
-\addbibresource{refs.bib}
-\usepackage{microtype}
+\usepackage{setspace}
 \usepackage{enumitem}
-\usepackage{caption}
 
-\captionsetup{font=small, labelfont=bf}
-\setlength{\parskip}{0.5em}
-\setlength{\parindent}{0pt}
-\hypersetup{colorlinks=true, linkcolor=black, citecolor=black, urlcolor=blue}
-
-\newtheorem{proposition}{Proposition}[section]
-\newtheorem{corollary}[proposition]{Corollary}
-\newtheorem{example}[proposition]{Example}
+\newtheorem{proposition}{Proposition}
+\newtheorem{assumption}{Assumption}
 \theoremstyle{remark}
-\newtheorem*{remark}{Remark}
+\newtheorem{remark}{Remark}
 
-\input{tables/baseline_macros.tex}
+\onehalfspacing
 
-\title{\textbf{Joins as Selection Problems:\
-Objective Misspecification in Record Linkage and Table Integration}}
-\author{}
+\title{From Data Products to Inference:\\ The Econometrics of Fuzzy Joins}
+\author{Gaurav Sood}
 \date{\today}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-Standard record linkage scores candidate pairs and then solves an assignment problem. That formulation is exact only when the quality of the linked table is separable over its selected links. Many empirical joins are not evaluated that way. The analyst cares about a property of the linked table as a whole: hierarchical nesting, distributional calibration, referential integrity, temporal continuity, or consistency across multiple joins. We formalize linkage as a selection problem over feasible linked tables. Additive pairwise scoring yields a surrogate objective; the analyst's actual problem typically adds a non-separable table-level criterion or imposes table-level constraints. This perspective connects naturally to Morris's finite selection model (FSM): when the criterion is global, candidate links should be evaluated by their contribution to the evolving table, not in isolation. We show that every penalized optimum is optimal for the constrained problem at the coherence level it attains, that one-to-one disagreements with the truth are combinatorially coupled through permutation cycles, and that downstream bias is bounded by distortion in the analysis labels induced by the join. A household example illustrates the general framework. In a reproducible simulation, the structured optimizer raises person-level accuracy from \HungarianPersonAcc{} under Hungarian assignment to \SetAwarePersonAcc{}, raises exact household recovery from \HungarianHHExact{} to \SetAwareHHExact{}, and lowers absolute bias from \HungarianBias{} to \SetAwareBias{}. The example is specific; the lesson is general.
+Data products built on fuzzy joins ship a single canonical linkage, hiding the many-to-many candidate-match graph from which it was constructed. This note studies downstream regression when the analyst has access to the candidate graph. Two naive single-dataset resolutions can mislead: edge expansion introduces an additional within-candidate-set variance penalty in the denominator of the OLS estimator, while score averaging induces nonclassical measurement error whose bias can have either sign. I propose multiple imputation over candidate assignments as an approximate solution that propagates linkage uncertainty, provided the candidate graph has high recall and the imputation probabilities are calibrated. When a validation sample with verified true links is available, the problem simplifies to regression calibration and the candidate graph is not needed. A further complication arises when the data product's covariates were themselves computed from an earlier fuzzy join: the upstream contamination is estimand-specific, invisible to the downstream analyst, and not captured by standard matching-uncertainty diagnostics. Simulations illustrate these results and show that the between-imputation share of variance is a useful diagnostic for when the analyst's own linkage uncertainty matters.
 \end{abstract}
 
 \section{Introduction}
 
-Classical record linkage begins with pairwise evidence. Candidate record pairs are compared, similarity scores are assigned, and the final linkage is obtained by classification or by solving a one-to-one assignment problem \citep{FellegiSunter1969}. When uniqueness constraints matter, the Hungarian method is a natural optimizer because the objective is additive over matched pairs \citep{Kuhn1955}. That workflow is often exactly right.
+Empirical researchers routinely analyze datasets assembled upstream by fuzzy-joining multiple administrative files. A firm-level panel might link Economic Census records to census villages using string similarity on transliterated place names. A health dataset might link hospital admissions to laboratory records using probabilistic matching on date of birth and Soundex codes. The analyst receives a clean panel and runs regressions on it, treating each row as if the linkage were exact. But the matching algorithm made decisions---it assigned ambiguous records to their best candidate or dropped them, and it routed some records to the wrong target. These decisions are part of the data-generating process, yet they are invisible in the shipped dataset.
 
-The difficulty is that many linked-data problems are not evaluated pair by pair. The object that matters is the linked table. A useful join may need to preserve household membership, panel continuity, foreign-key relationships, cluster composition, or known marginal distributions. These are properties of the output table as a whole, not sums over its rows. In such cases, solving the pairwise assignment problem exactly does not solve the analyst's problem. It solves a surrogate.
+This note asks what happens at the inference stage when the analyst can see the matching decisions. Suppose the data product ships not just the canonical linkage but the full candidate-match graph: every plausible (source, target) pair with a pairwise evidence score. The graph is bipartite and many-to-many. A firm can match several villages. A village can receive firms from multiple candidate sets. How should the analyst resolve this graph into a regression dataset?
 
-The core abstraction is therefore broader than ``household coherence matters.'' It is a mismatch between the \emph{unit of optimization} and the \emph{unit of analysis}. Standard linkage optimizes over candidate links. The analyst's loss function operates on the linked table. Whenever the table must satisfy a global property---hierarchical, distributional, temporal, relational, or compositional---pairwise optimization is misspecified.
+A companion paper \citep{sood2025selection} formalizes the join itself as a selection problem: the data producer chooses a subset of edges from $\mathcal{G}$ to form a linked table, and different choices optimize different objectives. When the analyst's loss function operates on the linked table as a whole---preserving hierarchical structure, satisfying calibration constraints, maintaining referential integrity---pairwise optimization is misspecified. This note takes up the downstream question that follows: given that the join has been done and shipped, possibly under the wrong objective, how should the analyst do inference?
 
-This paper develops that claim in four steps. First, we formalize joins as selection problems over feasible linked tables. The additive assignment formulation is one special case, and it is exact only when the analyst's criterion is representable as a linear functional of selected links. Otherwise the natural formulations are constrained or penalized set-level problems. Second, we connect this perspective to the finite selection model (FSM) introduced by \citet{Morris1979} for the RAND Health Insurance Experiment and recently formalized and extended by \citet{Chattopadhyay2026}. The original application was experimental design, but the principle is more general: when the criterion is non-separable, local optimization solves the wrong problem. Third, we state explicit conditions under which a structured or FSM-style criterion can reduce a bound on downstream bias: namely, when it reduces distortion in the analysis labels that enter the estimand. Fourth, we work out households as a minimal example and quantify the resulting gains in a fully reproducible simulation.
+Three findings emerge. First, two natural single-dataset resolutions can mislead. Expanding the graph (one row per candidate pair) introduces a within-candidate-set variance penalty in the denominator of the estimator, shrinking the coefficient relative to the score-averaged resolution (Proposition~\ref{prop:expanded}). Collapsing the graph (one row per firm, covariate averaged across candidates) induces nonclassical measurement error whose bias depends on the covariance between the true covariate and the averaging error, and can have either sign (Proposition~\ref{prop:collapsed}). Second, multiple imputation over candidate assignments provides an approximate solution that propagates linkage uncertainty, under conditions stated in Assumption~\ref{asm:mi}. Third, when a validation sample with verified true links is available---sampled from the full population including dropped records---the problem simplifies to regression calibration.
 
-The household example is not the thesis of the paper. It is a clean instantiation of a more general idea. A person-level optimizer spends pairwise evidence record by record. A household-level analyst uses the joined table household by household. The same logic applies to entity resolution, calibrated linkage, and multi-table integration.
+A further finding concerns the common case where the data product's covariates were themselves computed from an earlier fuzzy join. The upstream contamination introduces a second layer of measurement error that compounds with the researcher's own linkage error (Section~\ref{sec:cascade}). The contamination is estimand-specific: two analysts using the same data product with different covariates face different biases from the same upstream matching errors (Proposition~\ref{prop:estimand}). The diagnostic $\lambda$ computed from MI over the researcher's own join misses the upstream component entirely.
 
-\section{Joins as selection problems}
-\label{sec:selection}
+The literature on regression with linked data is substantial. \citet{lahiri2005} derive unbiased regression estimators under a one-to-one permutation model with known linkage probabilities. \citet{scheuren1993,scheuren1997} provide ratio-type bias corrections. \citet{chambers2009} and \citet{kim2012} extend these ideas to heterogeneous linkage error and incomplete linkage. \citet{kim2012multi} handle the case where more than two files are linked in a chain, with correlated linkage errors; \citet{kim2015} further relax the exchangeable-error assumption. \citet{han2019} develop a unified framework that exploits record linkage process data.
 
-\subsection{General setup}
+The approach closest to the MI procedure proposed here is \citet{goldstein2012}, who frame uncertain links as partially observed data and impute from candidate sets using match weights as priors. Their ``prior-informed imputation'' draws one candidate per ambiguous record in each imputation, which is the same mechanism described in Section~\ref{sec:mi}. \citet{harron2014} evaluate this approach in a healthcare linkage setting and find it reduces bias from linkage error. However, their worked examples and simulations are one-to-one healthcare linkages (patient admissions to lab records); the econometric consequences of the many-to-many geographic structure---phantom clustering, leverage contamination, sign-indeterminate bias from averaged covariates---are not analyzed.
 
-Let $A$ and $B$ denote two source tables. Let $E\subseteq A\times B$ be the set of admissible candidate links after blocking or other preliminary restrictions. A \emph{join} is a subset $J\subseteq E$ belonging to a feasible family $\mathcal{J}$ that encodes application constraints such as one-to-one matching, cardinality limits, compatibility restrictions, or higher-order structure. The selected links induce a linked output table $T(J)$.
+\citet{hof2012,hof2015} propose pseudo-likelihood methods treating match status as latent. \citet{hof2017} extend this to a joint probabilistic record linkage and survival model, estimating linkage and regression parameters simultaneously. \citet{slawski2021,slawski2025} develop a general mixture-model framework for secondary analysis when the analyst has only the linked file, applicable to GLMs, Cox models, and predictive modeling. \citet{wang2022} survey these and related developments. \citet{doidge2019} provide an accessible overview of linkage error bias for applied researchers. The Bayesian approach to joint linkage and inference \citep{tancredi2011,tancredi2015,steorts2016,gutman2013,dalzell2018,steorts2018} propagates uncertainty exactly by jointly modeling the matching and the downstream analysis; \citet{steorts2016} explicitly model linkage as a bipartite graph and allow duplicate detection. These methods require access to raw matching data and are computationally intensive.
 
-For each candidate link $e\in E$, let $s_e\in\mathbb{R}$ denote its pairwise score. The standard linkage objective is the additive score
-\begin{equation}
-S(J)=\sum_{e\in J} s_e.
-\label{eq:additive-score-general}
+The regression calibration approach in Section~\ref{sec:validation} connects to the classical measurement error literature \citep{carroll2006}, treating the fuzzy-join output as a mismeasured proxy for the true covariate. This connection has not been made explicit in the record linkage literature, where the focus is on correcting for linkage error within the linked file rather than using an external validation sample to calibrate the proxy relationship.
+
+These papers study related settings. My contribution is narrower: I analyze the specific downstream regression problem created when a data product ships a candidate-match table from a geographic fuzzy join. I compare expanded-edge, score-averaged, and imputation-based resolutions of the same candidate graph and show that the two single-dataset approaches produce distinct, formally characterizable pathologies (Propositions~\ref{prop:expanded}--\ref{prop:collapsed}). The nonclassical measurement error structure that arises from fuzzy string matching---where mismatches are confined to string-similar neighbors rather than exchangeable across records---makes the collapsed estimator's bias sign-indeterminate, a result that does not appear in the existing treatment. I also formalize the cascading-join problem---when the data product's covariates were themselves computed from an upstream fuzzy join---and show that the resulting contamination is estimand-specific (Proposition~\ref{prop:estimand}). The MI procedure itself follows \citet{goldstein2012}; what is new is the analysis of when and why it is needed in the many-to-many geographic setting, the regression calibration alternative when a full-population validation sample exists, and the characterization of upstream contamination that neither MI nor regression calibration can address without the data producer's cooperation.
+
+\section{Setup and Notation}
+
+Let $S = \{1,\dots,n\}$ index records in a source table (firms) and $T = \{1,\dots,K\}$ index records in a target table (villages). For each firm $i$, the true target is $v(i) \in T$. The regression of interest is
+\begin{equation}\label{eq:dgp}
+    Y_i = \beta_0 + \beta_1 X_{v(i)} + \eta_{v(i)} + \varepsilon_i,
 \end{equation}
-The additive rule solves
-\begin{equation}
-J^{\mathrm{add}}\in\arg\max_{J\in\mathcal{J}} S(J).
-\label{eq:additive-problem-general}
-\end{equation}
+where $X_k$ is a village-level covariate, $\eta_k \sim (0,\sigma^2_\eta)$ is a village-level shock, and $\varepsilon_i \sim (0,\sigma^2_\varepsilon)$ is firm-level noise. We observe $Y_i$ for every firm. We do not observe $v(i)$.
 
-To describe the analyst's actual problem, let $\Psi\bigl(T(J)\bigr)$ be a table-level criterion. Depending on the application, $\Psi$ may measure exact recovery of a hierarchy, agreement with known margins, referential integrity, temporal consistency, transitivity in entity resolution, or any other property of the linked table that is not simply the sum of rowwise scores.
+A fuzzy matcher produces a candidate-match graph $\mathcal{G} = (S, T, E, s)$, where $E \subseteq S \times T$ is a set of candidate edges and $s: E \to [0,1]$ assigns a pairwise evidence score to each edge. The candidate set for firm $i$ is $\mathcal{C}_i = \{(j, s_{ij}) : (i,j) \in E\}$. Throughout, I distinguish between the raw score $s_{ij}$ and any calibrated match probability $p_{ij} \approx P(v(i) = j \mid \mathcal{C}_i)$, which must be estimated separately.
 
-Two standard formulations are then
-\begin{equation}
-\max_{J\in\mathcal{J}}\; S(J)
-\qquad\text{subject to}\qquad
-\Psi\bigl(T(J)\bigr)\ge \kappa,
-\label{eq:constrained-general}
-\end{equation}
-and
-\begin{equation}
-\max_{J\in\mathcal{J}}\; U_\lambda(J)
-\equiv
-S(J)+\lambda\,\Psi\bigl(T(J)\bigr),
-\qquad \lambda\ge 0.
-\label{eq:penalized-general}
-\end{equation}
-The constrained form is natural when the analyst knows a minimum acceptable level of coherence or calibration. The penalized form is its Lagrangian relaxation.
+A resolution policy is a map $\pi: \mathcal{G} \to \mathcal{D}$ that produces a regression dataset $\mathcal{D}$, where each row has a dependent variable, a covariate, a weight, and a cluster identity. The canonical policy assigns firm $i$ to its top candidate if $s_{i(1)} \geq \tau$ and $s_{i(1)} - s_{i(2)} \geq \delta$, and drops everything else.
 
-The distinction between the additive problem \eqref{eq:additive-problem-general} and the structured problems \eqref{eq:constrained-general}--\eqref{eq:penalized-general} is exact, not rhetorical. If the analyst's criterion can be written as
-\[
-S(J)+\lambda\Psi\bigl(T(J)\bigr)=c+\sum_{e\in E} w_e\,\mathbf{1}\{e\in J\}
-\]
-on the feasible family $\mathcal{J}$ for some weights $w_e$, then the problem is separable and can be absorbed into edge weights. The interesting case begins exactly when no such representation exists. Then the value of a selected link depends on what else is in the join.
+The core difficulty is a mismatch between the unit of optimization and the unit of analysis \citep{sood2025selection}. The candidate graph is defined at the edge level: each $(i,j)$ pair has a score. But the analyst's regression operates on the linked table: a dataset with one row per firm and one village-level covariate, clustered at the village. Different resolution policies produce different tables, with different row counts, different covariate values, and different cluster structures. The pathologies in Section~\ref{sec:resolutions} arise because the two natural single-dataset resolutions optimize at the wrong unit: the expanded join operates at the edge level, and the collapsed estimator averages across edges within a firm, but neither produces a table whose properties align with the regression the analyst intends to run.
 
-\subsection{Penalty and constraint}
+Three features of $\mathcal{G}$ create complications absent from the one-to-one permutation model of \citet{lahiri2005}.
 
-\begin{proposition}[Penalized optimum implies constrained optimum at the attained level]
-\label{prop:lgr-general}
-Fix $\lambda\ge 0$, and let $\hat J_\lambda\in\arg\max_{J\in\mathcal{J}} U_\lambda(J)$. Write $\kappa_\lambda=\Psi\bigl(T(\hat J_\lambda)\bigr)$. Then $\hat J_\lambda$ solves the constrained problem \eqref{eq:constrained-general} with threshold $\kappa=\kappa_\lambda$.
-\end{proposition}
+\paragraph{One-to-many.} A single firm $i$ has edges to multiple candidate villages. This is the source of ambiguity. If $|\mathcal{C}_i| > 1$ with similar scores, the analyst must decide which covariate to assign.
 
-\begin{proof}
-Take any $J\in\mathcal{J}$ such that $\Psi\bigl(T(J)\bigr)\ge \kappa_\lambda$. If $S(J)>S(\hat J_\lambda)$, then
-\[
-U_\lambda(J)
-=
-S(J)+\lambda\Psi\bigl(T(J)\bigr)
-\ge
-S(J)+\lambda\kappa_\lambda
->
-S(\hat J_\lambda)+\lambda\kappa_\lambda
-=
-U_\lambda(\hat J_\lambda),
-\]
-contradicting optimality of $\hat J_\lambda$.
-\end{proof}
+\paragraph{Many-to-one.} Multiple firms share a candidate village. Under the canonical policy, this is benign: several firms assigned to the same village produce the standard within-village clustering. Under the expanded join, village $k$ receives firms from other villages whose candidate sets include $k$, contaminating the cluster.
 
-Proposition~\ref{prop:lgr-general} places the structured join problem beside balance-constrained matching and sampling formulations in which one optimizes an additive criterion subject to sample-level restrictions \citep{Zubizarreta2012,DevilleSarndal1992,DevilleTille2004}. It also clarifies the exact scope of the penalty--constraint connection used in the paper: every penalized optimum is a constrained optimum at the coherence level it attains. The converse does not automatically hold without additional regularity.
+\paragraph{Many-to-many.} A connected component in $\mathcal{G}$ contains multiple firms and multiple villages with edges crossing in both directions. Matching decisions within such a component are interdependent: assigning firm $i$ to village $k$ rather than $k'$ changes the composition of both village clusters.
 
-A minimal misspecification inequality follows immediately.
+Within-table deduplication (collapsing records that may refer to the same firm) creates a further many-to-one problem in the source table that compounds with the cross-table structure. I set this aside, noting that the same candidate-set framework applies.
 
-\begin{proposition}[When the additive optimum is not the analyst's optimum]
-\label{prop:dominance-general}
-Let $J_0,J_1\in\mathcal{J}$ satisfy $S(J_0)>S(J_1)$ and $\Psi\bigl(T(J_1)\bigr)>\Psi\bigl(T(J_0)\bigr)$. Then $J_1$ is preferred by the penalized objective \eqref{eq:penalized-general} whenever
-\begin{equation}
-\lambda>
-\frac{S(J_0)-S(J_1)}{\Psi\bigl(T(J_1)\bigr)-\Psi\bigl(T(J_0)\bigr)}.
-\label{eq:dominance-threshold}
-\end{equation}
-\end{proposition}
+\section{A Worked Example}\label{sec:example}
 
-\begin{proof}
-Subtract the two penalized objectives:
-\[
-U_\lambda(J_1)-U_\lambda(J_0)
-=
-\bigl(S(J_1)-S(J_0)\bigr)
-+
-\lambda\Bigl(\Psi\bigl(T(J_1)\bigr)-\Psi\bigl(T(J_0)\bigr)\Bigr).
-\]
-The right-hand side is positive exactly when \eqref{eq:dominance-threshold} holds.
-\end{proof}
+Ten villages, 51 firms. Three villages form a confusable cluster: rampur ($X = 0.85$), rampura ($X = 0.70$), ramnagar ($X = 0.50$). Their names differ by one or two characters, creating cross-matches under transliteration noise. Two villages, sultanpur ($X = 0.65$) and sultanganj ($X = 0.45$), are mildly confusable. The remaining five have distinctive names and never generate ambiguity.
 
-Proposition~\ref{prop:dominance-general} is elementary, but it isolates the central point of the paper. Solving the wrong problem exactly does not recover the right answer. Exact optimization of the additive surrogate is compatible with strict suboptimality for the analyst's actual objective.
+The DGP follows (\ref{eq:dgp}) with $\beta_0 = 3$, $\beta_1 = 5$, $\sigma_\eta = 0.8$, $\sigma_\varepsilon = 1.5$. The candidate-match table for selected ram-cluster firms is shown in Table~\ref{tab:example_candidates}.
 
-\subsection{Error cascades under one-to-one matching}
-
-The one-to-one case contains another structural fact that pairwise scoring obscures: disagreements with the truth are combinatorially coupled.
-
-Specialize now to equal-size one-to-one linkage. Let $\Sigma_n$ denote the set of permutations of $[n]$, and let $\sigma^\star\in\Sigma_n$ denote the true bijection. For any candidate linkage $\sigma\in\Sigma_n$, define the disagreement set
-\[
-D(\sigma,\sigma^\star)=\{i\in[n]:\sigma(i)\neq \sigma^\star(i)\}.
-\]
-
-\begin{proposition}[Cascade structure of one-to-one disagreements]
-\label{prop:cycles}
-For any $\sigma,\sigma^\star\in\Sigma_n$, the disagreement set $D(\sigma,\sigma^\star)$ decomposes into disjoint cycles of length at least $2$. In particular, if $\sigma\neq \sigma^\star$, then $|D(\sigma,\sigma^\star)|\ge 2$.
-\end{proposition}
-
-\begin{proof}
-Consider the permutation $\tau=(\sigma^\star)^{-1}\circ\sigma$ on $[n]$. The indices fixed by $\tau$ are exactly those for which $\sigma(i)=\sigma^\star(i)$. Every finite permutation decomposes into disjoint cycles, and every non-fixed point belongs to a cycle of length at least $2$. The disagreement set is therefore the union of those nontrivial cycles.
-\end{proof}
-
-Proposition~\ref{prop:cycles} does not say that linkage errors are probabilistically independent or dependent. It says something more basic: under bijectivity, they cannot arise one at a time. A mistaken assignment necessarily displaces at least one more record. In structured linkage problems the cascade can be much larger: one bad household link, one broken foreign key, or one inconsistent temporal match can force a chain of compensating errors elsewhere in the table.
-
-\section{The finite selection model and when it helps}
-\label{sec:fsm}
-
-\subsection{FSM as a general principle}
-
-Morris's finite selection model was introduced for experimental design in the RAND Health Insurance Experiment \citep{Morris1979,Newhouse1993}. There is a finite ground set of units, a feasible family of allocations, and a global design criterion. Treatment groups take turns selecting units in a fair random order. On each turn, the active group chooses the available unit that most improves the common criterion. The recent reformulation by \citet{Chattopadhyay2026} makes explicit that the important object is the incremental gain in a \emph{global} criterion, not an isolated unit score.
-
-Write $\mathcal{U}$ for a finite ground set and $\mathcal{F}\subseteq 2^{\mathcal{U}}$ for the feasible family. Let $Q:\mathcal{F}\to\mathbb{R}$ be the objective. The FSM constructs a selection $X\in\mathcal{F}$ sequentially. At step $t$, with partial selection $X_t$, the next admissible element is evaluated by its incremental contribution
-\[
-\Delta_Q(u\mid X_t)=Q(X_t\cup\{u\})-Q(X_t).
-\]
-If $Q$ is additive, then $\Delta_Q(u\mid X_t)$ does not depend on $X_t$ and the problem collapses to ordinary scoring. The only reason to invoke FSM thinking is that the value of $u$ depends on the current partial selection.
-
-That principle carries over directly to linkage. The ground set can be candidate record links, candidate block matches, or tuples in a multiway join. The feasible family encodes one-to-one, hierarchical, calibration, or consistency restrictions. The criterion can be the penalized or constrained objective from Section~\ref{sec:selection}. Randomized turn-taking is essential in experiments because design validity itself depends on randomization. In linkage, randomness is optional. What matters is the conceptual move from independent pairwise scoring to incremental evaluation against a table-level criterion.
-
-The present paper does not implement a literal randomized FSM. We use an exact structured optimizer in the household example so that the comparison isolates \emph{objective choice} rather than approximation error. An FSM-style sequential algorithm would be the natural next step when exact optimization over the structured feasible set is computationally infeasible.
-
-\subsection{When a structured criterion can reduce bias}
-
-To state when a structured criterion can help downstream inference, let $U_i^\star$ denote the analysis label for record $i$ under the true join. Depending on the application, $U_i^\star$ may be a household identifier, a treatment label, a classroom identifier, a time index, a foreign-key parent, or some other attribute imported through linkage. Under a candidate join $J$, let $\widetilde U_i(J)$ denote the label induced by the linked table $T(J)$.
-
-Suppose the analyst's target is
-\begin{equation}
-\theta^\star=\frac{1}{n}\sum_{i=1}^n q\bigl(Y_i,U_i^\star\bigr),
-\label{eq:target-general}
-\end{equation}
-and the linked-table analogue is
-\begin{equation}
-\theta(J)=\frac{1}{n}\sum_{i=1}^n q\bigl(Y_i,\widetilde U_i(J)\bigr).
-\label{eq:linked-general}
-\end{equation}
-Assume there is a metric $\rho$ on the label space and a constant $L<\infty$ such that
-\begin{equation}
-\bigl|q(y,u)-q(y,u')\bigr|\le L|y|\,\rho(u,u')
-\qquad\text{for all }y,u,u'.
-\label{eq:lipschitz-q}
-\end{equation}
-
-\begin{proposition}[Bias is bounded by distortion in analysis labels]
-\label{prop:bias-bound}
-Under \eqref{eq:target-general}--\eqref{eq:lipschitz-q},
-\begin{equation}
-\bigl|\theta(J)-\theta^\star\bigr|
-\le
-\frac{L}{n}\sum_{i=1}^n |Y_i|\,\rho\bigl(\widetilde U_i(J),U_i^\star\bigr).
-\label{eq:bias-bound}
-\end{equation}
-Consequently, for any random linkage rule $R$ producing $J_R$,
-\begin{equation}
-\bigl|\mathbb{E}[\theta(J_R)]-\theta^\star\bigr|
-\le
-\frac{L}{n}\sum_{i=1}^n \mathbb{E}\Bigl[|Y_i|\,\rho\bigl(\widetilde U_i(J_R),U_i^\star\bigr)\Bigr].
-\label{eq:bias-bound-random}
-\end{equation}
-\end{proposition}
-
-\begin{proof}
-Using the triangle inequality and \eqref{eq:lipschitz-q},
-\[
-\bigl|\theta(J)-\theta^\star\bigr|
-\le
-\frac{1}{n}\sum_{i=1}^n
-\bigl|q\bigl(Y_i,\widetilde U_i(J)\bigr)-q\bigl(Y_i,U_i^\star\bigr)\bigr|
-\le
-\frac{L}{n}\sum_{i=1}^n |Y_i|\,\rho\bigl(\widetilde U_i(J),U_i^\star\bigr),
-\]
-which gives \eqref{eq:bias-bound}. Taking expectations yields \eqref{eq:bias-bound-random}.
-\end{proof}
-
-Proposition~\ref{prop:bias-bound} states the condition transparently. A structured or FSM-style rule can lower an upper bound on downstream bias when it reduces distortion in the analysis labels that enter the estimand. It need not help when the added structure is irrelevant to the estimand, unavailable, or misspecified.
-
-In the simplest case, if a wrong join only changes a binary analysis label and outcomes are linear in that label, bias is controlled directly by how often the join changes the label.
-
-\begin{corollary}[Binary label misclassification and attenuation]
-\label{cor:attenuation}
-Suppose $U_i^\star=Z_i\in\{0,1\}$ is a balanced binary label, $\widetilde U_i(J)=W_i(J)$, and outcomes satisfy
-\begin{equation}
-Y_i=\alpha+\tau Z_i+u_i,
-\qquad \mathbb{E}[u_i\mid Z_i]=0.
-\label{eq:outcome-model-general}
-\end{equation}
-Assume $W_i(J_R)=Z_i\oplus E_i$ under linkage rule $R$, where $E_i\sim\mathrm{Bernoulli}(\varepsilon_R)$ is independent of $(Z_i,u_i)$ and $\oplus$ denotes exclusive OR. Then the linked difference-in-means estimator based on $W_i(J_R)$ satisfies
-\begin{equation}
-\mathbb{E}[\hat\tau_R]=(1-2\varepsilon_R)\tau.
-\label{eq:attenuation-general}
-\end{equation}
-Hence any linkage rule with a smaller induced misclassification rate $\varepsilon_R$ is less biased in absolute value.
-\end{corollary}
-
-\begin{proof}
-Under balance and symmetric misclassification,
-\[
-\Pr(Z_i=1\mid W_i=1)=1-\varepsilon_R,
-\qquad
-\Pr(Z_i=1\mid W_i=0)=\varepsilon_R.
-\]
-Therefore
-\[
-\mathbb{E}[Y_i\mid W_i=1]-\mathbb{E}[Y_i\mid W_i=0]
-=
-\tau\bigl((1-\varepsilon_R)-\varepsilon_R\bigr)
-=
-(1-2\varepsilon_R)\tau.
-\]
-\end{proof}
-
-\begin{remark}
-Corollary~\ref{cor:attenuation} is deliberately narrow. It relies on a balanced binary label, a linear outcome model, and symmetric misclassification. Outside that setting, linkage error need not attenuate. With continuous labels, asymmetric mistakes, or more complex estimands, bias can move in either direction.
-\end{remark}
-
-\section{Three sources of non-separability in table linkage}
-\label{sec:taxonomy}
-
-The household example below is just one instance of a broader phenomenon. At least three recurring sources of non-separability appear in record linkage and data integration.
-
-\textbf{Hierarchical or relational structure.} Households, classrooms, firms with subsidiaries, orders with line items, parent--child tables, and entity-resolution clusters all impose structure above the individual record. In entity resolution this is the canonical issue: pairwise match decisions are followed by transitive closure or clustering, but transitivity is a property of the cluster, not of any one pair. Collective entity-resolution methods and correlation clustering make that non-separability explicit by optimizing over partitions or graphs rather than isolated pairs \citep{Christen2012,BansalBlumChawla2004}. Household linkage is a matched-block version of the same problem.
-
-\textbf{Distributional calibration.} Sometimes the linked file should reproduce known margins or moments: age distributions, school sizes, treatment shares, or other calibration totals. Those constraints are free information about the target table. Ignoring them and maximizing an unconstrained additive score wastes information in exactly the way that ignoring auxiliary covariates wastes information in sampling or matching. Calibration estimators, entropy balancing, and the cube method all solve this kind of problem by enforcing sample-level balance, not unit-level fit \citep{DevilleSarndal1992,Hainmueller2012,DevilleTille2004}. A \emph{calibrated join} is the analogous object for linkage.
-
-\textbf{Cross-table or temporal consistency.} Real integrations rarely stop at one two-table join. If $A$ is linked to $B$ and $B$ to $C$, then the implied $A$--$C$ relation should make sense. Likewise, person-period joins in panels should preserve feasible temporal sequences. These are consistency conditions across joins or across time. They are non-separable even when each component join is one-to-one.
-
-Across all three cases, the common failure mode is the same. A flat pairwise score is used to optimize an objective that actually lives on the output table. The more informative the higher-order structure, the more costly that misspecification can be.
-
-\section{A worked household example}
-\label{sec:households}
-
-Households are a useful worked example because they make the mismatch between optimization and analysis especially transparent. The join is selected person by person, but the downstream analysis imports a household-level label.
-
-\subsection{Exact household-preserving linkage}
-
-Suppose the records in each file are partitioned into households,
-\[
-\mathcal{G}_A=\{g_1,\dots,g_K\},
-\qquad
-\mathcal{G}_B=\{h_1,\dots,h_K\},
-\]
-with compatible household sizes. The exact household-preserving feasible family consists of those one-to-one linkages that map each $g_k$ entirely into one $h_\ell$.
-
-For any admissible household pair $(g_k,h_\ell)$, define the compatibility score
-\begin{equation}
-C_{k\ell}
-=
-\max_{\varphi\in\Pi(g_k,h_\ell)}
-\sum_{i\in g_k} s_{i,\varphi(i)},
-\label{eq:compatibility-household}
-\end{equation}
-where $\Pi(g_k,h_\ell)$ is the set of bijections from members of $g_k$ to members of $h_\ell$.
-
-\begin{proposition}[Decomposition of the exact household-preserving optimum]
-\label{prop:decompose-household}
-The exact household-preserving additive problem is equivalent to the household-level assignment
-\begin{equation}
-\max_{\pi\in\Sigma_K}
-\sum_{k=1}^K C_{k,\pi(k)}.
-\label{eq:household-level-problem}
-\end{equation}
-An optimizer of the person-level problem is obtained by solving \eqref{eq:household-level-problem} and then using, within each matched household pair $(g_k,h_{\pi(k)})$, the bijection that attains $C_{k,\pi(k)}$.
-\end{proposition}
-
-\begin{proof}
-Any household-preserving person-level bijection can be written as a household permutation $\pi\in\Sigma_K$ together with within-household bijections $\varphi_k\in\Pi(g_k,h_{\pi(k)})$. The additive score therefore decomposes as
-\[
-\sum_{k=1}^K\sum_{i\in g_k} s_{i,\varphi_k(i)}.
-\]
-For a fixed $\pi$, the terms indexed by $k$ are independent, so each is maximized by $C_{k,\pi(k)}$. Maximizing over $\pi$ yields \eqref{eq:household-level-problem}.
-\end{proof}
-
-Proposition~\ref{prop:decompose-household} is why the benchmark in the simulation is useful. It is not a heuristic household-first rule. It is the exact optimizer of the additive score over the structurally correct feasible set.
-
-\subsection{A motivated two-household example}
-
-The mechanism appears in the smallest nontrivial case. Let file $A$ contain households $g_1=\{a_1,a_2\}$ and $g_2=\{a_3,a_4\}$, and let file $B$ contain $h_1=\{b_1,b_2\}$ and $h_2=\{b_3,b_4\}$. Suppose the true correspondence is $g_1\leftrightarrow h_1$ and $g_2\leftrightarrow h_2$, but one member in each household has a particularly plausible decoy in the neighboring household. A person-level score matrix of that form is
-\begin{equation}
-\label{eq:toy-matrix-household}
-\begin{pmatrix}
-0.95 & 0.04 & 0.07 & 0.10 \\
-0.05 & 0.92 & 0.06 & 1.01 \\
-0.08 & 0.07 & 0.94 & 0.06 \\
-0.09 & 1.00 & 0.05 & 0.93
-\end{pmatrix}.
-\end{equation}
-
-The additive optimizer prefers the crossover assignment
-\[
-a_1\mapsto b_1,
-\qquad
-a_2\mapsto b_4,
-\qquad
-a_3\mapsto b_3,
-\qquad
-a_4\mapsto b_2,
-\]
-with score $3.90$, over the household-preserving identity assignment with score $3.74$. So this is a genuine case in which the additive optimizer sacrifices the analyst's objective in order to gain pairwise score.
-
-Now suppose the downstream analysis imports a household treatment label from file $B$. If household $g_1$ is treated and $g_2$ is control, the crossover join swaps one treated and one control label. In the balanced symmetric setting of Corollary~\ref{cor:attenuation}, that induced misclassification attenuates the linked treatment effect. The point of the example is not that all linkage error attenuates. It is that small pairwise gains can be inferentially costly once the analysis label lives at household level.
-
-\subsection{Local ambiguity and household breakage}
-
-To connect the example to ambiguity sweeps, consider one file-$A$ household $g=\{a_1,\dots,a_m\}$ with true counterpart $h=\{b_1,\dots,b_m\}$ and a nearby decoy household $h'=\{b_1',\dots,b_m'\}$. For role $r$, define the margin
-\begin{equation}
-D_r(\alpha)=s(a_r,b_r)-s(a_r,b_r'),
-\label{eq:role-margin-household}
-\end{equation}
-where $\alpha$ indexes ambiguity. Positive $D_r(\alpha)$ means the true within-household candidate looks better than the decoy for role $r$.
-
-Assume the local block is role-aligned, so exact household recovery occurs if and only if every role prefers the true candidate. This gives a direct link between person-level ambiguity and household breakage.
-
-\begin{proposition}[Local household crossover probability]
-\label{prop:crossover-household}
-Suppose $D_1(\alpha),\dots,D_m(\alpha)$ are independent with common distribution function $F_\alpha$. Then
-\begin{equation}
-\Pr_\alpha\bigl(\text{exact recovery of }g\bigr)=\bigl[1-F_\alpha(0)\bigr]^m,
-\label{eq:exact-recovery-household}
-\end{equation}
-so
-\begin{equation}
-\Pr_\alpha\bigl(\text{household }g\text{ is broken}\bigr)=1-\bigl[1-F_\alpha(0)\bigr]^m.
-\label{eq:crossover-prob-household}
-\end{equation}
-If additionally $D_r(\alpha)\sim N\!\bigl(\mu(\alpha),\sigma^2(\alpha)\bigr)$, then
-\begin{equation}
-\Pr_\alpha\bigl(\text{household }g\text{ is broken}\bigr)
-=
-1-\Phi\!\left(\frac{\mu(\alpha)}{\sigma(\alpha)}\right)^m.
-\label{eq:gaussian-crossover-household}
-\end{equation}
-Hence household breakage rises with ambiguity whenever $\mu(\alpha)/\sigma(\alpha)$ falls with $\alpha$, and it rises with household size $m$ for any fixed nondegenerate ambiguity level.
-\end{proposition}
-
-\begin{proof}
-Exact recovery requires $D_r(\alpha)>0$ for all $r=1,\dots,m$. Independence yields
-\[
-\Pr_\alpha\bigl(D_1(\alpha)>0,\dots,D_m(\alpha)>0\bigr)
-=
-\prod_{r=1}^m \Pr_\alpha\bigl(D_r(\alpha)>0\bigr)
-=
-\bigl[1-F_\alpha(0)\bigr]^m.
-\]
-The second claim follows by complementing, and the Gaussian formula follows by evaluating the one-dimensional probability with $\Phi$.
-\end{proof}
-
-This result is deliberately local. It is not a theorem about arbitrary global Hungarian assignments. Its role is narrower: it explains why exact household recovery can deteriorate much faster than person-level accuracy once nearby decoys become plausible.
-
-\section{Simulation design}
-\label{sec:simulation}
-
-The simulation is intentionally specific because the goal is to illustrate the general argument in one clean setting. Each replication generates 70 latent two-person households. Households are paired into ambiguity clusters so that nearby households share similar surname-like and age-like latent characteristics. Within each household a binary treatment $Z_h$ is drawn with probability $1/2$ and inherited by both members. Outcomes follow
-\[
-Y_{hr}=20+6Z_h+0.5\,\mathrm{Age}_{hr}+\varepsilon_{hr},
-\]
-with Gaussian noise.
-
-Two observed files are generated from the same latent population. File $A$ is relatively clean and carries the outcome. File $B$ is noisier and carries the treatment label used in downstream estimation. Both files contain noisy surname, first-name, and age variables. An ambiguity parameter controls how similar neighboring households look in the observed linkage space.
-
-All methods use the same person-level score matrix,
-\[
-s_{ij}=-1.5\,|\text{surname}_i-\text{surname}_j|-1.2\,|\text{fname}_i-\text{fname}_j|-0.35\,|\text{age}_i-\text{age}_j|.
-\]
-We compare three procedures:
-\begin{description}[leftmargin=1.5em]
-    \item[Greedy person-level.] Select the highest-scoring remaining person pair at each step.
-    \item[Hungarian person-level.] Solve the additive assignment problem exactly.
-    \item[Structured exact optimizer.] Build the household compatibility matrix from \eqref{eq:compatibility-household}, solve the household-level assignment \eqref{eq:household-level-problem}, and recover the implied within-household matches.
-\end{description}
-
-The evaluation metrics follow the theory:
-\begin{enumerate}[leftmargin=1.5em]
-    \item \textbf{Person accuracy}: the share of persons linked to their true counterpart.
-    \item \textbf{Exact household recovery}: the share of file-$A$ households whose members are both linked to the correct file-$B$ household.
-    \item \textbf{Absolute bias}: the absolute error of the linked estimator
-    \[
-    \hat\tau(J)=\bar Y_{W(J)=1}-\bar Y_{W(J)=0},
-    \]
-    where $W(J)$ is the treatment label imported from file $B$ under join $J$.
-\end{enumerate}
-
-Baseline results use ambiguity level 1.5 with 150 Monte Carlo replications. The ambiguity sweep uses levels 0.5, 1.0, 1.5, 2.0, and 2.5 with 60 replications each. The script \texttt{scripts/generate\_results.py} reproduces every table and figure.
-
-\section{Results}
-\label{sec:results}
-
-Table~\ref{tab:baseline} reports the baseline comparison. Standard errors across replications appear in parentheses.
-
-\begin{table}[htbp]
+\begin{table}[ht]
 \centering
-\caption{Baseline simulation results at ambiguity level 1.5.}
-\label{tab:baseline}
-\input{tables/tab_baseline_metrics.tex}
+\caption{Candidate-match table, selected firms from the ram-cluster. $\leftarrow$ marks the true village.}
+\label{tab:example_candidates}
+\input{tables/example_candidates}
 \end{table}
 
-The first comparison is algorithmic: Hungarian improves on greedy linkage because it solves the additive person-level objective exactly. The second comparison is substantive: relative to Hungarian, the structured optimizer improves person-level accuracy by \PersonGainVsHungarian{}, improves exact household recovery by \HHGainVsHungarian{}, and reduces absolute bias by \BiasReductionVsHungarian{} points.
+Firm~0 is clean: rampur dominates. Firm~6 is a false positive: ``rampura'' perfectly matches the wrong village, and the canonical policy assigns it to rampura with confidence (the analyst's dataset records literacy as 0.70 instead of 0.85). Firm~3 ties at 0.86 between rampur and rampura; under the canonical policy ($\delta = 0.10$), it is dropped. Firm~11 ties and is also dropped.
 
-Those gains line up with the theory. Proposition~\ref{prop:decompose-household} says that once households define the relevant feasible set, the right exact benchmark is a household-level assignment, not a person-level one. Proposition~\ref{prop:crossover-household} says that household recovery compounds person-level ambiguity multiplicatively. Corollary~\ref{cor:attenuation} says that, in the binary symmetric setup used here, reducing induced treatment-label misclassification lowers downstream bias. The simulation turns those statements into magnitudes.
+The canonical policy yields 49 matched firms: 47 true positives, 2 false positives, 2 false negatives. The ram-cluster forms a dense many-to-many connected component: 21 firms and 3 villages connected by candidate edges. Under the canonical policy, it resolves to a clean many-to-one structure. Under the expanded join, the many-to-many structure is preserved.
 
-Figure~\ref{fig:hh-sweep} plots exact household recovery across the ambiguity sweep. Figure~\ref{fig:bias-sweep} plots absolute downstream bias.
+Table~\ref{tab:example_summary} summarizes match outcomes. Table~\ref{tab:estimators_toy} compares estimators on the toy data.
 
-\begin{figure}[htbp]
+\begin{table}[ht]
 \centering
-\includegraphics[width=0.82\textwidth]{figures/fig_sweep_household_exact.pdf}
-\caption{Exact household recovery as a function of ambiguity. All methods degrade as ambiguity rises, but the structured optimizer retains a large advantage throughout.}
-\label{fig:hh-sweep}
-\end{figure}
+\caption{Match outcomes, toy example ($\tau = 0.50$, $\delta = 0.10$).}
+\label{tab:example_summary}
+\input{tables/example_summary}
+\end{table}
 
-\begin{figure}[htbp]
+\begin{table}[ht]
 \centering
-\includegraphics[width=0.82\textwidth]{figures/fig_sweep_bias.pdf}
-\caption{Absolute downstream bias across the ambiguity sweep. The structured optimizer dominates throughout, with the advantage widening as the join becomes harder.}
-\label{fig:bias-sweep}
-\end{figure}
+\caption{Estimator comparison, toy example ($K=10$, $n=51$).}
+\label{tab:estimators_toy}
+\input{tables/estimators_toy}
+\end{table}
 
-At low ambiguity, the pairwise surrogate is often close to the structured problem, so the gap is moderate. As ambiguity rises, cross-household temptations become more common and exact household recovery deteriorates much faster for the person-level procedures. The structured optimizer also maintains a clear advantage in downstream bias throughout the sweep.
+\begin{remark}
+The toy DGP has $\beta_1 = 5$, but with 10 villages and $\sigma_\eta = 0.8$, the oracle estimate is $\hat\beta_1 = 6.18$, reflecting sampling variability with a small number of village-level clusters. The toy example illustrates graph geometry and the mechanics of each resolution. Quantitative comparisons of estimator performance at scale come from the medium-scale simulation ($K=40$, $n=600$) in Section~\ref{sec:when}.
+\end{remark}
 
-These differences are not generated by richer pairwise features or by tuning. All three procedures use the same underlying record-level score matrix. What changes is whether the optimizer is permitted to spend pairwise score by damaging a property of the linked table that the downstream analysis actually uses.
 
-\section{Discussion}
+\section{Single-Dataset Resolutions}\label{sec:resolutions}
 
-The paper's main claim is general: many joins are better understood as selection problems over feasible linked tables than as additive optimization over candidate pairs. Households are one clean example because the gap between person-level optimization and household-level analysis is easy to see, but the same logic applies to table integration problems throughout statistics and computer science.
+The canonical policy drops ambiguous firms, creating a selection problem analogous to listwise deletion. This is well understood \citep{diconsiglio2018,doidge2019}. The natural response is to use the full candidate-match graph. This section shows that the two obvious single-dataset approaches each produce a distinct pathology.
 
-Three practical implications follow.
+\subsection{The Expanded Full Join}\label{sec:expanded}
 
-First, linkage should be designed against the downstream estimand, not against pairwise accuracy alone. Pairwise precision and recall can be high while the analysis labels in the linked table are badly distorted. Proposition~\ref{prop:bias-bound} and Corollary~\ref{cor:attenuation} make that distinction explicit.
+Keep every candidate pair $(i,j)$ with $s_{ij} \geq \tau$. Firm $i$ appears $|\mathcal{C}_i|$ times, once for each candidate village, with the same $Y_i$ and different $X_j$. Assign score-proportional weights $w_{ij} = s_{ij} / \sum_{j'} s_{ij'}$ within each candidate set. In the example, 51 firms generate 76 rows.
 
-Second, higher-order constraints are information, not inconvenience. If the output table should preserve a hierarchy, satisfy calibration totals, or remain consistent across composed joins, that information can and should be used by the optimizer. Ignoring it is analogous to ignoring covariates in experimental design or auxiliary variables in survey sampling.
+Two problems are bundled here. The first is a point-estimate problem: the same outcome $Y_i$ is paired with multiple candidate covariates, only one of which generated it. The second is an inference problem: the cluster structure in the expanded dataset is contaminated.
 
-Third, the computer-science lesson is broader than linkage alone. The paper is really about decomposable versus non-decomposable objectives in combinatorial optimization for data integration. When the true objective has block structure, graph structure, calibration constraints, or compositional consistency, optimizing a flat additive relaxation and hoping the structure emerges is a gamble. Hierarchical assignment, constrained optimization, and FSM-style sequential selection are three ways to respect the object that actually matters.
+\begin{proposition}[Expanded vs.\ collapsed estimator]\label{prop:expanded}
+Define the score-weighted average covariate $\tilde X_i = \sum_j w_{ij} X_j$ and the within-candidate-set variance $V_i = \sum_j w_{ij}(X_j - \tilde X_i)^2$. Weighted OLS on the expanded edge-level data gives, after centering,
+\[
+    \hat\beta_{\mathrm{exp}} = \frac{\sum_i Y_i \tilde X_i}{\sum_i \tilde X_i^2 + \sum_i V_i}.
+\]
+The collapsed estimator (one row per firm, covariate $\tilde X_i$) gives
+\[
+    \hat\beta_{\mathrm{col}} = \frac{\sum_i Y_i \tilde X_i}{\sum_i \tilde X_i^2}.
+\]
+Therefore $|\hat\beta_{\mathrm{exp}}| \leq |\hat\beta_{\mathrm{col}}|$ whenever $\operatorname{sign}(\hat\beta_{\mathrm{exp}}) = \operatorname{sign}(\hat\beta_{\mathrm{col}})$. The expanded estimator is shrunk toward zero relative to the collapsed estimator by a factor $\sum_i \tilde X_i^2 / (\sum_i \tilde X_i^2 + \sum_i V_i)$.
+\end{proposition}
 
-That said, structure is not automatically beneficial. It helps when the added information is both \emph{known} and \emph{aligned} with the analyst's loss function. If the structure is irrelevant to the estimand, weakly informative, or misspecified, enforcing it can add variance or even increase bias. The lesson is not that all linkage should be household-aware, calibration-aware, or temporally constrained. The lesson is that the relevant table-level criterion should be stated explicitly and then optimized on purpose.
+\begin{proof}
+The expanded WLS objective with weights $w_{ij}$ can be written in terms of firm-level sufficient statistics. The cross-product $\sum_{i,j} w_{ij} Y_i X_j = \sum_i Y_i \tilde X_i$ because $Y_i$ is constant within firm $i$. The sum of squares decomposes as $\sum_{i,j} w_{ij} X_j^2 = \sum_i \tilde X_i^2 + \sum_i V_i$ by the variance decomposition identity.
+\end{proof}
 
-\section{Reproducibility}
+The penalty $\sum_i V_i$ is the total within-candidate-set dispersion of $X$. For firms with a single candidate, $V_i = 0$. For ambiguous firms in confusable clusters, $V_i$ can be large. The expanded estimator is not necessarily attenuated relative to the oracle---since the collapsed estimator can overshoot (Section~\ref{sec:collapsed})---but it is always more shrunk toward zero than the collapsed estimator.
 
-The project folder contains a single script, \texttt{scripts/generate\_results.py}, that reproduces every table and figure included in this paper. Running the script writes CSV summaries to \texttt{results/}, \LaTeX{} table fragments to \texttt{tables/}, and PDF figures to \texttt{figures/}. The \texttt{Makefile} compiles the paper. The bibliography is stored in \texttt{refs.bib}, with citation checks documented in \texttt{refs\_verified.md}.
+The inference problem is distinct. The many-to-one contamination means that rampur's cluster in the expanded dataset contains firms whose outcomes were generated by different village-level shocks $\eta$. Two-way clustering (firm, village) addresses the mechanical correlation from repeated $Y_i$ values but does not correct for the contaminated village clusters. Village-level aggregates computed from the expanded data are also biased: mean revenue in rampur, computed over the 15 firms assigned there, includes 7 firms whose outcomes were generated elsewhere.
 
-\printbibliography
+The expanded full join is a useful artifact to ship because it encodes $\mathcal{G}$ completely. It is not a regression dataset.
+
+\subsection{The Collapsed Estimator}\label{sec:collapsed}
+
+Construct one row per firm with score-weighted average covariate $\tilde X_i = \sum_j w_{ij} X_j$. Write $\tilde X_i = X_{v(i)} + u_i$, where $X_{v(i)} \equiv X_i^*$ is the true covariate and $u_i = \tilde X_i - X_i^*$ is measurement error. For unambiguous firms, $u_i \approx 0$. For ambiguous firms, $u_i$ is determined by the candidate-set structure.
+
+\begin{proposition}[Collapsed estimator: nonclassical EIV]\label{prop:collapsed}
+Under model~(\ref{eq:dgp}) with $E[\varepsilon_i \mid X_i^*, u_i] = 0$, the probability limit of the collapsed OLS estimator is
+\[
+    \operatorname{plim} \hat\beta_{\mathrm{col}} = \beta_1 \cdot \frac{\operatorname{Var}(X^*) + \operatorname{Cov}(X^*, u)}{\operatorname{Var}(X^*) + \operatorname{Var}(u) + 2\operatorname{Cov}(X^*, u)}.
+\]
+Classical attenuation obtains when $\operatorname{Cov}(X^*, u) = 0$. When $\operatorname{Cov}(X^*,u) \neq 0$, the bias can have either sign.
+\end{proposition}
+
+\begin{proof}
+Standard errors-in-variables algebra. Write $\hat\beta_{\mathrm{col}} = \widehat{\operatorname{Cov}}(\tilde X, Y) / \widehat{\operatorname{Var}}(\tilde X)$. Since $\tilde X = X^* + u$ and $Y = \beta_1 X^* + \eta + \varepsilon$, the numerator converges to $\beta_1[\operatorname{Var}(X^*) + \operatorname{Cov}(X^*,u)]$ and the denominator to $\operatorname{Var}(X^*) + \operatorname{Var}(u) + 2\operatorname{Cov}(X^*,u)$.
+\end{proof}
+
+The result makes the source of sign-indeterminate bias transparent. In fuzzy matching, $u_i$ is nonzero only for firms in confusable clusters. If those clusters have above-average $X^*$ (as when common-root village names concentrate in higher-literacy areas), then $\operatorname{Cov}(X^*,u)$ can be positive and large enough to push the bias ratio above one, amplifying rather than attenuating the coefficient. In the medium-scale simulation ($K=40$, $n=600$), $\hat\beta_{\mathrm{col}} = 9.21$ against an oracle of $6.32$, a bias of $+46\%$.
+
+The analyst cannot safely assume attenuation; the direction of the bias depends on how ambiguity covaries with $X$, which is determined by the naming conventions of the underlying geography and the structure of the string-similarity graph.
+
+\begin{remark}
+Proposition~\ref{prop:collapsed} is a special case of a general principle: downstream bias is controlled by distortion in the analysis labels imported through linkage. \citet{sood2025selection} prove that when the analyst's estimand takes the form $\theta^* = n^{-1}\sum q(Y_i, U_i^*)$ and $q$ is Lipschitz in the label $U_i^*$, then $|\theta(J) - \theta^*| \leq L n^{-1} \sum |Y_i| \rho(\tilde U_i(J), U_i^*)$, where $\rho$ is a metric on the label space. In the present setting, $U_i^* = v(i)$ is the true village, $\tilde U_i$ is the assigned village, and the ``distortion'' is the resulting measurement error in $X$. Their binary-treatment attenuation result---where symmetric misclassification always attenuates---does not extend to the continuous-covariate case here, because $\operatorname{Cov}(X^*,u) \neq 0$ breaks the symmetry that makes attenuation generic.
+\end{remark}
+
+\begin{remark}
+In \citet{lahiri2005} and \citet{slawski2025}, mismatches are modeled as exchangeable: any record can be swapped with any other, producing $\operatorname{Cov}(X^*,u) = 0$ and classical attenuation. \citet{kim2015} relax the exchangeability assumption and allow for correlated linkage errors, but in a setting where the correlation arises from shared linking variables, not from the string-similarity structure of place names. In fuzzy geographic matching, mismatches are structured by the candidate graph: a rampur firm can only be swapped with rampura or ramnagar, never with bagaha or dharamkot. This constraint makes $\operatorname{Cov}(X^*,u)$ generically nonzero and its sign dependent on the covariate structure of the confusable clusters.
+\end{remark}
+
+\subsection*{Transition}
+
+Both single-dataset resolutions flatten the candidate-match graph into one realization. The expanded approach pairs each outcome with multiple candidate covariates, penalizing the denominator. The collapsed approach replaces the candidate set with a weighted average, inducing nonclassical measurement error. These pathologies are instances of a broader phenomenon: when the quality of a link depends on what else is in the join, additive scoring is a misspecified surrogate for the analyst's actual objective. \citet{sood2025selection} catalog three recurring sources of this non-separability---hierarchical structure, distributional calibration, and cross-table consistency---and show that the gap between the additive optimum and the analyst's optimum can be arbitrarily large. The resolution proposed here is different from theirs (they advocate structured optimization at the join stage; I address inference after the join is shipped), but the diagnosis is the same.
+
+\section{Multiple Imputation Over the Candidate Graph}\label{sec:mi}
+
+\begin{assumption}[Conditions for MI over candidate assignments]\label{asm:mi}
+The MI procedure below requires three conditions.
+\begin{enumerate}[label=(\roman*)]
+    \item \textbf{High recall.} For all but a negligible fraction of firms $i$, the true village $v(i)$ is contained in $\mathcal{C}_i$. If the true link is absent from the candidate set, no imputation procedure can recover it.
+    \item \textbf{Calibrated probabilities.} The imputation probabilities $p_{ij}$ approximate $P(v(i) = j \mid \mathcal{C}_i)$. Raw similarity scores $s_{ij}$ need not satisfy this; calibration from a validation sample (Section~\ref{sec:validation}) or a multinomial model is needed in general.
+    \item \textbf{Approximate independence.} Firm-level draws are an acceptable approximation to any component-level constraints on the matching. Section~\ref{sec:mi_caveat} discusses when this fails.
+\end{enumerate}
+\end{assumption}
+
+Under Assumption~\ref{asm:mi}, generate $M$ datasets as follows. In each draw $m$, for each firm $i$: if $i$ is unambiguous under the canonical policy, assign $v^{(m)}(i)$ to its top candidate deterministically; if $i$ is ambiguous, draw one candidate village with probability $p_{ij}$; if $i$ has zero candidates, exclude it from draw $m$. Each draw produces a standard dataset: one row per included firm, one covariate value $X_{v^{(m)}(i)}$, clustered at $v^{(m)}(i)$. Run the model on each draw; combine via Rubin's rules \citep{rubin1987}.
+
+The pooled estimate is $\hat Q = M^{-1} \sum_m \hat\beta_1^{(m)}$. The total variance is
+\begin{equation}\label{eq:rubin}
+    T = \bar U + \left(1 + \frac{1}{M}\right) B,
+\end{equation}
+where $\bar U = M^{-1}\sum_m \hat V^{(m)}$ is the mean within-imputation variance and $B = (M-1)^{-1}\sum_m (\hat\beta_1^{(m)} - \hat Q)^2$ is the between-imputation variance.
+
+The diagnostic
+\[
+    \lambda = \frac{(1+1/M)B}{T}
+\]
+summarizes the share of the reported variance attributable to between-imputation dispersion under the imputation model. It is an MI-style diagnostic, not an exact causal decomposition of variance into ``sampling'' and ``matching'' components.
+
+Within each draw, the dataset has one row per firm and one village assignment. There is no within-candidate-set variance penalty (unlike the expanded join) and no averaged-$X$ pathology (unlike the collapsed estimator). Each firm belongs to exactly one village cluster, and the many-to-one contamination that afflicts the expanded join does not arise: a village's cluster in draw $m$ contains only firms assigned to that village in draw $m$.
+
+When the candidate graph has high recall and the imputation probabilities are calibrated, MI over candidate assignments can substantially reduce bias relative to deterministic resolutions while propagating linkage uncertainty through Rubin's rules. In the medium-scale simulation, MI gives $\hat\beta_1 = 6.01$, within 4.9\% of the oracle ($6.32$), with $\lambda = 0.006$ (Tables~\ref{tab:estimators_main}--\ref{tab:mi_diag}).
+
+\subsection{Caveat: Independent Draws in Dense Components}\label{sec:mi_caveat}
+
+The procedure draws matches independently across firms. Within a dense connected component (such as the ram-cluster: 21 firms, 3 villages), a draw that sends all 21 firms to rampur is valid under independent sampling but not a plausible realization of the true linkage, because each village has a known approximate firm count. This is an approximation, not a feature, and should be understood as such from the outset.
+
+The issue is structural. Under one-to-one matching, \citet{sood2025selection} show that errors propagate in cycles: a single mistaken assignment necessarily displaces at least one other record, and the disagreement set decomposes into disjoint cycles of length two or more. In the many-to-many geographic setting, the constraint is softer---multiple firms can legitimately belong to the same village---but village-level firm counts still impose an approximate capacity constraint that independent draws ignore. The practical consequence is that $B$ may overstate matching uncertainty by including implausible allocations. A more disciplined approach would sample from the posterior over matchings conditional on village-level firm counts, treating the matching as a constrained assignment problem \citep{tancredi2015,steorts2016}. For most applications, independent-draw MI is a reasonable first approximation: the number of ambiguous firms is typically small relative to village populations, so marginal draws barely perturb village-level counts.
+
+
+\section{Validation Samples and Regression Calibration}\label{sec:validation}
+
+When no validation data are available, the MI procedure of Section~\ref{sec:mi} is the analyst's best option. When a validation sample with verified true links exists, the problem simplifies.
+
+Suppose the data producer verifies the true village $v(i)$ for a random sample of $n_v$ firms. Call this the golden set $\mathcal{V}$. For each $i \in \mathcal{V}$, the analyst observes both the true covariate $X_{v(i)}$ and the assigned covariate $X_{\pi(i)}$ from the canonical linkage.
+
+On the full linked dataset, run $Y$ on $X_{\pi(i)}$ to get $\hat\beta_{\mathrm{naive}}$. On the golden set, run $X_{v(i)}$ on $X_{\pi(i)}$ to get $\hat\gamma$. The corrected estimate is $\hat\beta_{\mathrm{corrected}} = \hat\beta_{\mathrm{naive}} / \hat\gamma$. Bootstrap the pair of regressions for standard errors. This is standard regression calibration in the measurement error literature \citep{carroll2006}, applied here with the fuzzy-join output serving as the mismeasured proxy.
+
+The calibration slope $\hat\gamma$ absorbs the combined effect of false positives, the nonclassical error structure, and the correlation between error and covariate. The analyst does not need the candidate-match graph.
+
+\paragraph{What the golden set must contain.} This is the critical design requirement. If the golden set is a random sample of \textit{matched records only}, the analyst can estimate $\hat\gamma$ and correct for FP bias, because the golden set reveals how the assigned covariate deviates from the true covariate among retained firms. But the canonical policy also dropped firms. The dropped firms are absent from the matched sample. Selection bias from false negatives is invisible.
+
+If the golden set is a random sample of the \textit{full population}, including firms that the canonical policy dropped, the analyst can address both problems. For matched firms, the calibration slope corrects for FP bias. For dropped firms, the analyst now observes their true villages and can estimate the selection bias directly: the gap between the oracle regression on the full golden set (all firms, true links) and the oracle restricted to matched firms is the selection bias; the gap between the restricted oracle and the naive regression on matched firms is the measurement error bias from FPs.
+
+\paragraph{Limitations.} Three issues warrant care.
+
+First, the measurement error from fuzzy matching is heterogeneous: distinctive-village firms have zero error; confusable-cluster firms have potentially large error. A single $\hat\gamma$ averages over both populations. If the confusable-cluster share is modest, $\hat\gamma$ is dominated by the zero-error firms and barely corrects. Stratifying by candidate-set size or score gap helps but requires larger golden sets.
+
+Second, regression calibration gives a corrected point estimate and a total SE via bootstrapping, but it does not decompose variance into sampling and matching components. If the analyst needs $\lambda$, they need MI. But for the narrower question ``what is the right $\hat\beta$ and how precise is it,'' regression calibration suffices.
+
+Third, if the golden set oversamples from ambiguous components (as would be natural for efficiency), any extrapolation to the full dataset requires reweighting to restore population representativeness. The bias and $\lambda$ estimates are conditional on the golden-set composition; without reweighting, they are not population-representative.
+
+
+\section{When Does Matching Uncertainty Matter?}\label{sec:when}
+
+Two conditions must hold jointly for matching uncertainty to be large relative to sampling uncertainty. A non-trivial share of records must be ambiguous. And the candidate villages in ambiguous sets must differ meaningfully on $X$. If either condition fails, matching uncertainty is small.
+
+In the simulation ($K=40$, $n=600$, three confusable clusters), 4\% of firms are ambiguous and candidate literacies differ by up to 0.50 within sets, yet $\lambda = 0.006$. The bootstrap exercise (Table~\ref{tab:variance_decomp}) shows that matching uncertainty is small relative to sampling uncertainty in this design, but it does not deliver an exact additive decomposition: the variance of $\hat\beta_1$ from sampling (holding matches fixed) is $0.22$, from matching (holding the sample fixed) is $0.008$, and the joint variance is $0.18$.
+
+\begin{table}[ht]
+\centering
+\caption{Estimator comparison, medium-scale simulation ($K=40$, $n=600$).}
+\label{tab:estimators_main}
+\input{tables/estimators_main}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\caption{MI diagnostics via Rubin's rules ($M = 200$ draws).}
+\label{tab:mi_diag}
+\input{tables/mi_diagnostics}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\caption{Bootstrap variance decomposition ($B = 200$ replicates).}
+\label{tab:variance_decomp}
+\input{tables/variance_decomp}
+\end{table}
+
+Calibration to real data products suggests when matching uncertainty would be larger. Published applications of masala-merge report match rates that vary sharply by linkage task: some census-to-census location matches exceed 98\%, while Economic Census to village linkages report match rates of 65\% to 85\% in certain states \citep{diconsiglio2018}. In the latter regime, 15 to 35\% of records are dropped or ambiguous, and $\lambda$ can exceed 0.10.
+
+Whether the analyst needs $\lambda$ or just a corrected estimate determines which path to take. With a full-population golden set, regression calibration gives the corrected $\hat\beta$ and a total SE. With the candidate-match table and MI, the analyst additionally gets $\lambda$. As simulation-based guidance: if $\lambda < 0.05$, matching uncertainty can be noted but safely ignored; if $\lambda > 0.10$, the MI-based interval should be the primary reported interval.
+
+
+\section{Cascading Joins}\label{sec:cascade}
+
+The analysis so far assumes the covariates in the target table are measured without error. In practice, many data products are themselves assembled by fuzzy matching. A village-level literacy variable may be computed from administrative records that were fuzzy-matched to villages in an earlier join $J_1$. The researcher then fuzzy-matches their own firm survey to the same villages in $J_2$ and imports the published covariate. The total measurement error has two layers, and only one is visible to the researcher.
+
+\subsection{Two-layer error decomposition}
+
+Let $X_k^*$ denote the true covariate for village $k$. Suppose the data product computes $X_k$ by averaging records assigned to $k$ in the upstream join $J_1$. If a fraction $\alpha_k$ of records assigned to $k$ truly belong elsewhere, the published covariate is
+\begin{equation}\label{eq:j1contam}
+    X_k = (1 - \alpha_k) X_k^* + \alpha_k \bar X_{-k},
+\end{equation}
+where $\bar X_{-k}$ is the average covariate among the wrongly assigned records. The contamination error is $u_k^{(1)} = \alpha_k(\bar X_{-k} - X_k^*)$.
+
+Under the researcher's join $J_2$, firm $i$ is assigned to village $\pi(i)$, which may differ from the true village $v(i)$. The covariate the regression uses is $X_{\pi(i)}$, which carries both layers of error. The total measurement error decomposes as
+\begin{equation}\label{eq:twolayer}
+    u_i = \underbrace{\bigl(X_{\pi(i)}^* - X_{v(i)}^*\bigr)}_{u_i^{(2)}: \text{ wrong village from } J_2}
+        + \underbrace{u_{\pi(i)}^{(1)}}_{\text{contaminated covariate from } J_1}.
+\end{equation}
+The two components are not independent. When $\pi(i) \neq v(i)$, the $J_1$ contamination is evaluated at the wrong village: a firm misassigned to rampura in $J_2$ picks up rampura's contamination from $J_1$, not rampur's. And both error sources are structured by the same geography: villages that are hard to match in $J_1$ tend to be hard to match to in $J_2$, because the same confusable name clusters generate ambiguity in both joins.
+
+Applying Proposition~\ref{prop:collapsed} to the two-layer error,
+\begin{equation}\label{eq:twolayer_plim}
+    \operatorname{plim}\hat\beta = \beta_1 \cdot
+    \frac{\operatorname{Var}(X^*) + \operatorname{Cov}(X^*, u^{(1)} + u^{(2)})}
+         {\operatorname{Var}(X^*) + \operatorname{Var}(u^{(1)}) + \operatorname{Var}(u^{(2)}) + 2\operatorname{Cov}(u^{(1)},u^{(2)}) + 2\operatorname{Cov}(X^*, u^{(1)} + u^{(2)})}.
+\end{equation}
+The researcher can estimate $\operatorname{Var}(u^{(2)})$ from their own candidate-match table. The remaining terms---$\operatorname{Var}(u^{(1)})$, $\operatorname{Cov}(X^*, u^{(1)})$, and $\operatorname{Cov}(u^{(1)}, u^{(2)})$---are frozen into the data product. Consequently, $\lambda$ computed from MI over $J_2$ understates total matching uncertainty, because it captures only the $J_2$ component.
+
+\subsection{Estimand-specific contamination}
+
+The upstream contamination affects different published covariates differently, even though the underlying matching errors are the same. The contamination error at village $k$ is $u_k^{(1)} = \alpha_k(\bar X_{-k} - X_k^*)$. The misassignment share $\alpha_k$ is the same for all covariates computed from the same upstream-linked records. But the gap $\bar X_{-k} - X_k^*$ depends on how much the covariate varies within the confusable cluster.
+
+\begin{proposition}[Estimand-specific contamination]\label{prop:estimand}
+Let $X^{(a)}$ and $X^{(b)}$ be two village-level covariates computed from the same set of $J_1$-linked records, with contamination errors $u_k^{(1,a)} = \alpha_k(\bar X_{-k}^{(a)} - X_k^{*(a)})$ and $u_k^{(1,b)} = \alpha_k(\bar X_{-k}^{(b)} - X_k^{*(b)})$. Then
+\[
+    \frac{\operatorname{Var}(u^{(1,a)})}{\operatorname{Var}(u^{(1,b)})}
+    =
+    \frac{\sum_k \alpha_k^2 (\bar X_{-k}^{(a)} - X_k^{*(a)})^2}
+         {\sum_k \alpha_k^2 (\bar X_{-k}^{(b)} - X_k^{*(b)})^2}.
+\]
+This ratio depends entirely on the within-cluster heterogeneity of each covariate and can be arbitrarily large or small.
+\end{proposition}
+
+In the simulation ($K=20$, $n=150$, multivariate DGP with $\beta_{\mathrm{lit}}=5$ and $\beta_{\mathrm{pop}}=1.5$), the ram-cluster has a within-cluster literacy spread of 0.27 but a within-cluster log-population spread of 0.40 on a much larger scale (proportionally small relative to the cross-village range). Over 200 Monte Carlo replications, two analysts using the same data product, same joins, and same firms face a 38-fold difference in total bias: $-0.14$ for the literacy coefficient versus $+0.004$ for the log-population coefficient.
+
+The upstream match rate is identical for both analysts. The upstream contamination share $\alpha_k$ is identical. The damage is not.
+
+\begin{remark}
+This result implies that summary match-quality statistics---overall match rate, pairwise accuracy---are insufficient diagnostics for downstream analysts. What matters is the estimand-specific contamination: how much do the upstream matching errors move the particular covariate that enters this analyst's regression? Two analysts with the same match rate face different effective contamination, and neither can assess their own exposure from the published match rate alone.
+\end{remark}
+
+
+\section{Implications for Data Products}
+
+The analysis suggests two paths to valid inference from the researcher's own join, and a third concern about joins inherited from the data product.
+
+The simpler path requires a validated random sample from the full population, including records the canonical policy dropped. With this golden set, the analyst uses regression calibration to correct for both FP bias and selection bias. The candidate graph is not needed. The analyst burden is low.
+
+The harder path requires the candidate-match graph: a table with one row per (source, candidate) pair above a screening threshold, with columns for $s_{ij}$, rank, and a flag for the default assignment. With this graph, the analyst runs MI, computes $\lambda$, and assesses whether matching uncertainty is material. This is more informative but more complex. The candidate-match table also serves a third purpose: it enables structured re-optimization of the join itself, should the analyst's objective require table-level properties that the canonical policy does not enforce \citep{sood2025selection}.
+
+Both paths address only $J_2$---the researcher's own join. The upstream contamination from $J_1$ (Section~\ref{sec:cascade}) requires the data producer to expose artifacts from their own matching. At minimum, the data producer should report which published covariates were computed from fuzzy-matched records (as opposed to, say, census tables linked by administrative codes), along with the match rate and the geographic distribution of ambiguous matches. Ideally, the data producer would ship a $J_1$ validation sample or the $J_1$ candidate-match table, enabling the downstream analyst to propagate both layers of uncertainty. Without these, the $J_1$ component of matching uncertainty is invisible and frozen.
+
+Verifying a few hundred records from the full population is a one-time cost that simplifies every downstream analysis. Shipping the candidate-match table enables a richer decomposition at higher analyst cost. When both are feasible, they complement each other: the golden set enables quick regression calibration, while the candidate-match table enables MI with calibrated probabilities estimated from the golden set.
+
+Both paths require the canonical linkage with \texttt{match\_status} flags (exact, unambiguous fuzzy, ambiguous dropped, no candidates). This is the baseline artifact. Analysts who never examine the golden set or candidate table still benefit from knowing which records are exact matches, which are fuzzy, and which were dropped.
+
+The matching step belongs on the same footing as other uncertain components of empirical analysis. Analysts already report standard errors that account for sampling, clustering, and heteroskedasticity. Matching uncertainty, when non-negligible, belongs in the same accounting. \citet{sood2025selection} argue that the join should be optimized against the analyst's actual objective, not a pairwise surrogate. This note takes the complementary position: when the join has already been done and shipped, the analyst can still recover valid inference---for their own join. For the upstream join, they need the data producer's help.
+
+\bibliographystyle{apalike}
+\bibliography{references}
 
 \end{document}
