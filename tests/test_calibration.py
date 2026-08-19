@@ -56,7 +56,7 @@ class TestRakeWeights:
         df = pd.DataFrame({"age": [0, 1, 2]})
         spec = CalibrationSpec(margins={"age": {0: 0.33, 1: 0.34, 2: 0.33}})
 
-        weights, achieved, iterations = rake_weights([], df, spec)
+        weights, _achieved, iterations = rake_weights([], df, spec)
         assert len(weights) == 0
         assert iterations == 0
 
@@ -70,7 +70,7 @@ class TestRakeWeights:
             max_iterations=100,
         )
 
-        weights, achieved, iterations = rake_weights(matches, df, spec)
+        weights, achieved, _iterations = rake_weights(matches, df, spec)
 
         assert len(weights) == 10
         assert abs(achieved["age"][0] - 0.5) < 0.02
@@ -93,7 +93,7 @@ class TestRakeWeights:
             tolerance=0.05,
         )
 
-        weights, achieved, _ = rake_weights(matches, df, spec)
+        _weights, achieved, _ = rake_weights(matches, df, spec)
 
         assert abs(achieved["age"][0] - 0.6) < 0.1
         assert abs(achieved["region"]["N"] - 0.5) < 0.1

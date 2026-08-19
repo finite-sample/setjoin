@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""
-Generate simulation results, tables, and figures for the FSM-style join paper.
+"""Generate simulation results, tables, and figures for the FSM-style join paper.
 
 This script reproduces all tables/figures included in the paper.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -13,10 +13,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from setjoin import HierarchySpec, evaluate_matches, greedy_match, hungarian_match, structure_aware_match
+from setjoin import (
+    HierarchySpec,
+    greedy_match,
+    hungarian_match,
+    structure_aware_match,
+)
 
 
-def simulate_population(n_groups: int = 70, ambiguity: float = 1.0, seed: int = 0) -> pd.DataFrame:
+def simulate_population(
+    n_groups: int = 70, ambiguity: float = 1.0, seed: int = 0
+) -> pd.DataFrame:
     """Generate a synthetic population with group structure and treatment assignment."""
     if n_groups <= 0:
         raise ValueError("n_groups must be positive")
@@ -39,7 +46,9 @@ def simulate_population(n_groups: int = 70, ambiguity: float = 1.0, seed: int = 
         first_name_mod = max(12, int(50 / ambiguity))
 
         for role in [0, 1]:
-            first_name_code = int((surname_code * 3 + role * 5 + rng.integers(-1, 2)) % first_name_mod)
+            first_name_code = int(
+                (surname_code * 3 + role * 5 + rng.integers(-1, 2)) % first_name_mod
+            )
             age_true = float(base_age + (-2 if role == 0 else 2) + rng.normal(0, 1.0))
             y_true = float(20 + 6 * z + 0.5 * age_true + rng.normal(0, 2.0))
             rows.append(
@@ -58,7 +67,9 @@ def simulate_population(n_groups: int = 70, ambiguity: float = 1.0, seed: int = 
     return pd.DataFrame(rows)
 
 
-def make_files(pop: pd.DataFrame, ambiguity: float = 1.0, seed: int = 1) -> tuple[pd.DataFrame, pd.DataFrame]:
+def make_files(
+    pop: pd.DataFrame, ambiguity: float = 1.0, seed: int = 1
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Create two noisy files (A and B) from a population for linkage evaluation."""
     rng = np.random.default_rng(seed)
     A = pop.copy()
@@ -70,11 +81,17 @@ def make_files(pop: pd.DataFrame, ambiguity: float = 1.0, seed: int = 1) -> tupl
     A["a_group_id"] = A["latent_group_id"]
 
     noisy_member = ((B["cluster"] % 2 == 0) & (B["role"] == 0)).to_numpy()
-    B["surname_obs"] = B["surname_code_true"] + rng.integers(-int(1 + ambiguity), int(2 + ambiguity), len(B))
+    B["surname_obs"] = B["surname_code_true"] + rng.integers(
+        -int(1 + ambiguity), int(2 + ambiguity), len(B)
+    )
     extra = rng.integers(-int(2 * ambiguity), int(2 * ambiguity) + 1, len(B))
-    B["fname_obs"] = B["first_name_code_true"] + rng.integers(-3, 4, len(B)) + noisy_member * extra
-    B["age_obs"] = B["age_true"] + rng.normal(0, 1.3 + 0.6 * ambiguity, len(B)) + noisy_member * rng.normal(
-        0, 0.8 * ambiguity, len(B)
+    B["fname_obs"] = (
+        B["first_name_code_true"] + rng.integers(-3, 4, len(B)) + noisy_member * extra
+    )
+    B["age_obs"] = (
+        B["age_true"]
+        + rng.normal(0, 1.3 + 0.6 * ambiguity, len(B))
+        + noisy_member * rng.normal(0, 0.8 * ambiguity, len(B))
     )
     B["b_group_id"] = B["latent_group_id"]
 
@@ -84,8 +101,7 @@ def make_files(pop: pd.DataFrame, ambiguity: float = 1.0, seed: int = 1) -> tupl
 
 
 def pair_score_matrix(A: pd.DataFrame, B: pd.DataFrame) -> np.ndarray:
-    """
-    Compute pairwise similarity scores between records in A and B.
+    """Compute pairwise similarity scores between records in A and B.
 
     Scoring weights: surname (-1.5), first name (-1.2), age (-0.35).
     """
@@ -98,7 +114,9 @@ def pair_score_matrix(A: pd.DataFrame, B: pd.DataFrame) -> np.ndarray:
     return -1.5 * np.abs(a_s - b_s) - 1.2 * np.abs(a_f - b_f) - 0.35 * np.abs(a_a - b_a)
 
 
-def evaluate(A: pd.DataFrame, B: pd.DataFrame, matches: list[tuple[int, int]]) -> dict[str, float]:
+def evaluate(
+    A: pd.DataFrame, B: pd.DataFrame, matches: list[tuple[int, int]]
+) -> dict[str, float]:
     """Compute linkage quality metrics: person accuracy, group coherence, and bias."""
     rows: list[dict[str, float]] = []
     for i, j in matches:
@@ -106,7 +124,9 @@ def evaluate(A: pd.DataFrame, B: pd.DataFrame, matches: list[tuple[int, int]]) -
         b = B.iloc[j]
         rows.append(
             {
-                "true_person_match": float(a["latent_person_id"] == b["latent_person_id"]),
+                "true_person_match": float(
+                    a["latent_person_id"] == b["latent_person_id"]
+                ),
                 "true_group_match": float(a["latent_group_id"] == b["latent_group_id"]),
                 "z_a_true": float(a["z_true"]),
                 "z_b_linked": float(b["z_true"]),
@@ -118,8 +138,14 @@ def evaluate(A: pd.DataFrame, B: pd.DataFrame, matches: list[tuple[int, int]]) -
 
     group_exact = df.groupby("a_group_id")["true_group_match"].mean().eq(1.0).mean()
 
-    true_gap = A.loc[A["z_true"] == 1, "y_true"].mean() - A.loc[A["z_true"] == 0, "y_true"].mean()
-    linked_gap = df.loc[df["z_b_linked"] == 1, "y_true"].mean() - df.loc[df["z_b_linked"] == 0, "y_true"].mean()
+    true_gap = (
+        A.loc[A["z_true"] == 1, "y_true"].mean()
+        - A.loc[A["z_true"] == 0, "y_true"].mean()
+    )
+    linked_gap = (
+        df.loc[df["z_b_linked"] == 1, "y_true"].mean()
+        - df.loc[df["z_b_linked"] == 0, "y_true"].mean()
+    )
 
     return {
         "person_accuracy": float(df["true_person_match"].mean()),
@@ -134,7 +160,9 @@ def one_run(ambiguity: float, seed: int, n_groups: int = 70) -> pd.DataFrame:
     A, B = make_files(pop, ambiguity=ambiguity, seed=seed + 1000)
     score = pair_score_matrix(A, B)
 
-    hierarchy = HierarchySpec.from_dataframe(A, B, source_group_col="a_group_id", target_group_col="b_group_id")
+    hierarchy = HierarchySpec.from_dataframe(
+        A, B, source_group_col="a_group_id", target_group_col="b_group_id"
+    )
 
     methods = {
         "Greedy person-level": greedy_match(score).matches,
@@ -145,7 +173,7 @@ def one_run(ambiguity: float, seed: int, n_groups: int = 70) -> pd.DataFrame:
     rows: list[dict[str, float]] = []
     for method, matches in methods.items():
         ev = evaluate(A, B, matches)
-        ev["method"] = method  # type: ignore[assignment]
+        ev["method"] = method
         ev["ambiguity"] = ambiguity
         ev["seed"] = seed
         rows.append(ev)
@@ -164,36 +192,51 @@ def run_many(ambiguity_values: list[float], n_runs: int) -> pd.DataFrame:
 
 def summarize(df: pd.DataFrame, by: list[str]) -> pd.DataFrame:
     grouped = df.groupby(by)
-    out = grouped.agg(
+    return grouped.agg(
         person_accuracy_mean=("person_accuracy", "mean"),
-        person_accuracy_se=("person_accuracy", lambda x: x.std(ddof=1) / np.sqrt(len(x))),
+        person_accuracy_se=(
+            "person_accuracy",
+            lambda x: x.std(ddof=1) / np.sqrt(len(x)),
+        ),
         group_exact_mean=("group_exact_match_rate", "mean"),
-        group_exact_se=("group_exact_match_rate", lambda x: x.std(ddof=1) / np.sqrt(len(x))),
+        group_exact_se=(
+            "group_exact_match_rate",
+            lambda x: x.std(ddof=1) / np.sqrt(len(x)),
+        ),
         abs_bias_mean=("abs_bias_treatment_gap", "mean"),
-        abs_bias_se=("abs_bias_treatment_gap", lambda x: x.std(ddof=1) / np.sqrt(len(x))),
+        abs_bias_se=(
+            "abs_bias_treatment_gap",
+            lambda x: x.std(ddof=1) / np.sqrt(len(x)),
+        ),
         group_person_mean=("group_accuracy_personlevel", "mean"),
-        group_person_se=("group_accuracy_personlevel", lambda x: x.std(ddof=1) / np.sqrt(len(x))),
+        group_person_se=(
+            "group_accuracy_personlevel",
+            lambda x: x.std(ddof=1) / np.sqrt(len(x)),
+        ),
     ).reset_index()
-    return out
 
 
 def format_table(baseline_summary: pd.DataFrame, table_path: Path) -> None:
     order = ["Greedy person-level", "Hungarian person-level", "Set-aware group-first"]
     baseline_summary = baseline_summary.copy()
-    baseline_summary["method"] = pd.Categorical(baseline_summary["method"], categories=order, ordered=True)
+    baseline_summary["method"] = pd.Categorical(
+        baseline_summary["method"], categories=order, ordered=True
+    )
     baseline_summary = baseline_summary.sort_values("method")
 
     lines = []
     lines.append(r"\begin{tabular}{lccc}")
     lines.append(r"\toprule")
-    lines.append(r"Method & Person accuracy & Group exact match rate & Absolute bias \\")
+    lines.append(
+        r"Method & Person accuracy & Group exact match rate & Absolute bias \\"
+    )
     lines.append(r"\midrule")
     for _, row in baseline_summary.iterrows():
         lines.append(
-            f'{row["method"]} & '
-            f'{row["person_accuracy_mean"]:.3f} ({row["person_accuracy_se"]:.3f}) & '
-            f'{row["group_exact_mean"]:.3f} ({row["group_exact_se"]:.3f}) & '
-            f'{row["abs_bias_mean"]:.3f} ({row["abs_bias_se"]:.3f}) \\\\'
+            f"{row['method']} & "
+            f"{row['person_accuracy_mean']:.3f} ({row['person_accuracy_se']:.3f}) & "
+            f"{row['group_exact_mean']:.3f} ({row['group_exact_se']:.3f}) & "
+            f"{row['abs_bias_mean']:.3f} ({row['abs_bias_se']:.3f}) \\\\"
         )
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
@@ -201,9 +244,15 @@ def format_table(baseline_summary: pd.DataFrame, table_path: Path) -> None:
 
 
 def write_macros(baseline_summary: pd.DataFrame, macro_path: Path) -> None:
-    row_h = baseline_summary.loc[baseline_summary["method"] == "Hungarian person-level"].iloc[0]
-    row_s = baseline_summary.loc[baseline_summary["method"] == "Set-aware group-first"].iloc[0]
-    row_g = baseline_summary.loc[baseline_summary["method"] == "Greedy person-level"].iloc[0]
+    row_h = baseline_summary.loc[
+        baseline_summary["method"] == "Hungarian person-level"
+    ].iloc[0]
+    row_s = baseline_summary.loc[
+        baseline_summary["method"] == "Set-aware group-first"
+    ].iloc[0]
+    row_g = baseline_summary.loc[
+        baseline_summary["method"] == "Greedy person-level"
+    ].iloc[0]
 
     def cmd(name: str, value: float) -> str:
         return rf"\newcommand{{\{name}}}{{{value:.3f}}}"
@@ -220,10 +269,18 @@ def write_macros(baseline_summary: pd.DataFrame, macro_path: Path) -> None:
         cmd("GreedyBias", row_g["abs_bias_mean"]),
         cmd("HungarianBias", row_h["abs_bias_mean"]),
         cmd("SetAwareBias", row_s["abs_bias_mean"]),
-        cmd("PersonGainVsHungarian", row_s["person_accuracy_mean"] - row_h["person_accuracy_mean"]),
-        cmd("GroupGainVsHungarian", row_s["group_exact_mean"] - row_h["group_exact_mean"]),
+        cmd(
+            "PersonGainVsHungarian",
+            row_s["person_accuracy_mean"] - row_h["person_accuracy_mean"],
+        ),
+        cmd(
+            "GroupGainVsHungarian",
+            row_s["group_exact_mean"] - row_h["group_exact_mean"],
+        ),
         cmd("HHGainVsHungarian", row_s["group_exact_mean"] - row_h["group_exact_mean"]),
-        cmd("BiasReductionVsHungarian", row_h["abs_bias_mean"] - row_s["abs_bias_mean"]),
+        cmd(
+            "BiasReductionVsHungarian", row_h["abs_bias_mean"] - row_s["abs_bias_mean"]
+        ),
     ]
     macro_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -256,7 +313,9 @@ def plot_baseline(summary: pd.DataFrame, out_dir: Path) -> None:
 def plot_sweep(sweep_summary: pd.DataFrame, out_dir: Path) -> None:
     order = ["Greedy person-level", "Hungarian person-level", "Set-aware group-first"]
     sweep_summary = sweep_summary.copy()
-    sweep_summary["method"] = pd.Categorical(sweep_summary["method"], categories=order, ordered=True)
+    sweep_summary["method"] = pd.Categorical(
+        sweep_summary["method"], categories=order, ordered=True
+    )
     sweep_summary = sweep_summary.sort_values(["method", "ambiguity"])
 
     plt.figure(figsize=(6.4, 4.2))
@@ -286,11 +345,15 @@ def plot_sweep(sweep_summary: pd.DataFrame, out_dir: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parent.parent)
+    parser.add_argument(
+        "--project-root", type=Path, default=Path(__file__).resolve().parent.parent
+    )
     parser.add_argument("--baseline-ambiguity", type=float, default=1.5)
     parser.add_argument("--baseline-runs", type=int, default=150)
     parser.add_argument("--sweep-runs", type=int, default=60)
-    parser.add_argument("--sweep-values", nargs="+", type=float, default=[0.5, 1.0, 1.5, 2.0, 2.5])
+    parser.add_argument(
+        "--sweep-values", nargs="+", type=float, default=[0.5, 1.0, 1.5, 2.0, 2.5]
+    )
     args = parser.parse_args()
 
     project_root = args.project_root
@@ -313,7 +376,9 @@ def main() -> None:
     sweep_runs.to_csv(results_dir / "sweep_runs.csv", index=False)
     sweep_summary.to_csv(results_dir / "sweep_summary.csv", index=False)
 
-    baseline_table = baseline_summary.loc[baseline_summary["ambiguity"] == args.baseline_ambiguity].copy()
+    baseline_table = baseline_summary.loc[
+        baseline_summary["ambiguity"] == args.baseline_ambiguity
+    ].copy()
     format_table(baseline_table, tables_dir / "tab_baseline_metrics.tex")
     write_macros(baseline_table, tables_dir / "baseline_macros.tex")
 

@@ -34,7 +34,7 @@ class MatchReport:
     target_df: pd.DataFrame | None = None
     """Optional target DataFrame for detailed analysis."""
 
-    _cache: dict[str, object] = field(default_factory=dict, repr=False)
+    _cache: dict[str, dict[int, int]] = field(default_factory=dict, repr=False)
 
     @property
     def n_matches(self) -> int:
@@ -43,9 +43,7 @@ class MatchReport:
 
     @property
     def record_accuracy(self) -> float | None:
-        """
-        Fraction of matches that are correct (if ground truth provided).
-        """
+        """Fraction of matches that are correct (if ground truth provided)."""
         if self.ground_truth is None:
             return None
 
@@ -56,8 +54,9 @@ class MatchReport:
 
     @property
     def group_accuracy(self) -> float | None:
-        """
-        Fraction of records matched to the correct group (if groups and truth provided).
+        """Fraction of records matched to the correct group.
+
+        Returns None unless both group maps and the ground truth are set.
         """
         if (
             self.ground_truth is None
@@ -85,9 +84,7 @@ class MatchReport:
 
     @property
     def group_exact_match_rate(self) -> float | None:
-        """
-        Fraction of source groups where ALL members matched to the same target group.
-        """
+        """Fraction of source groups whose members all land in one target group."""
         if self.source_groups is None or self.target_groups is None:
             return None
 
@@ -95,7 +92,7 @@ class MatchReport:
         src_idx_to_tgt_idx = dict(self.result.matches)
 
         exact_matches = 0
-        for _src_group_id, src_indices in self.source_groups.items():
+        for src_indices in self.source_groups.values():
             tgt_groups_matched: set[int | None] = set()
             for src_idx in src_indices:
                 tgt_idx = src_idx_to_tgt_idx.get(src_idx)
@@ -108,8 +105,7 @@ class MatchReport:
 
     @property
     def score_sacrifice(self) -> float | None:
-        """
-        Total score lost compared to unconstrained Hungarian matching.
+        """Total score lost compared to unconstrained Hungarian matching.
 
         Positive value means structure-aware matching sacrificed score for coherence.
         """
@@ -119,8 +115,7 @@ class MatchReport:
         return hungarian_result.total_score - self.result.total_score
 
     def match_confidence(self) -> pd.DataFrame:
-        """
-        Compute per-match confidence metrics.
+        """Compute per-match confidence metrics.
 
         Returns DataFrame with columns:
         - source_idx, target_idx: the match
@@ -150,8 +145,7 @@ class MatchReport:
         return pd.DataFrame(rows)
 
     def group_margins(self) -> pd.DataFrame | None:
-        """
-        Compute per-group score margins.
+        """Compute per-group score margins.
 
         Returns DataFrame with columns:
         - source_group: source group ID
@@ -200,8 +194,7 @@ class MatchReport:
         return pd.DataFrame(rows)
 
     def error_anatomy(self) -> pd.DataFrame | None:
-        """
-        Analyze errors by comparing to ground truth.
+        """Analyze errors by comparing to ground truth.
 
         Returns DataFrame with columns:
         - source_idx: source record
@@ -243,8 +236,7 @@ class MatchReport:
         return pd.DataFrame(rows)
 
     def method_comparison(self, other: "MatchReport") -> pd.DataFrame:
-        """
-        Compare this result with another method's result.
+        """Compare this result with another method's result.
 
         Returns DataFrame showing where the methods differ.
         """
@@ -289,8 +281,7 @@ class MatchReport:
         return pd.DataFrame(rows)
 
     def to_csv(self, output_dir: str | Path) -> None:
-        """
-        Write all diagnostic artifacts to CSV files.
+        """Write all diagnostic artifacts to CSV files.
 
         Creates:
         - match_confidence.csv
@@ -339,7 +330,7 @@ class MatchReport:
     def _target_idx_to_group(self) -> dict[int, int]:
         """Map target index to target group."""
         if "_target_idx_to_group" in self._cache:
-            return self._cache["_target_idx_to_group"]  # type: ignore[return-value]
+            return self._cache["_target_idx_to_group"]
 
         result: dict[int, int] = {}
         if self.target_groups:
@@ -359,8 +350,7 @@ def evaluate_matches(
     source_group_col: str | None = None,
     target_group_col: str | None = None,
 ) -> dict[str, float]:
-    """
-    Evaluate linkage quality with standard metrics.
+    """Evaluate linkage quality with standard metrics.
 
     Args:
         source: Source DataFrame
@@ -401,7 +391,7 @@ def evaluate_matches(
             idx: gid for gid, indices in target_groups.items() for idx in indices
         }
 
-        for _src_gid, src_indices in source_groups.items():
+        for src_indices in source_groups.values():
             matched_groups: set[int | None] = set()
             for src_idx in src_indices:
                 tgt_idx_result = src_idx_to_tgt_idx.get(src_idx)

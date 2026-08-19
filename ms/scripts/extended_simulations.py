@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
-"""
-Extended simulation experiments for the setjoin package.
+"""Extended simulation experiments for the setjoin package.
 
 These simulations demonstrate package capabilities and can expand the paper's
 empirical section with additional experiments.
 """
+
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -28,8 +27,7 @@ def simulate_variable_sizes(
     ambiguity: float = 1.0,
     seed: int = 0,
 ) -> pd.DataFrame:
-    """
-    Generate population with variable group sizes.
+    """Generate population with variable group sizes.
 
     Args:
         n_groups: Number of groups
@@ -60,8 +58,12 @@ def simulate_variable_sizes(
         first_name_mod = max(12, int(50 / ambiguity))
 
         for role in range(group_size):
-            first_name_code = int((surname_code * 3 + role * 5 + rng.integers(-1, 2)) % first_name_mod)
-            age_true = float(base_age + (role - group_size / 2) * 3 + rng.normal(0, 1.0))
+            first_name_code = int(
+                (surname_code * 3 + role * 5 + rng.integers(-1, 2)) % first_name_mod
+            )
+            age_true = float(
+                base_age + (role - group_size / 2) * 3 + rng.normal(0, 1.0)
+            )
             y_true = float(20 + 6 * z + 0.5 * age_true + rng.normal(0, 2.0))
             rows.append(
                 {
@@ -95,11 +97,17 @@ def make_noisy_files(
     A["a_group_id"] = A["latent_group_id"]
 
     noisy_member = ((B["cluster"] % 2 == 0) & (B["role"] == 0)).to_numpy()
-    B["surname_obs"] = B["surname_code_true"] + rng.integers(-int(1 + ambiguity), int(2 + ambiguity), len(B))
+    B["surname_obs"] = B["surname_code_true"] + rng.integers(
+        -int(1 + ambiguity), int(2 + ambiguity), len(B)
+    )
     extra = rng.integers(-int(2 * ambiguity), int(2 * ambiguity) + 1, len(B))
-    B["fname_obs"] = B["first_name_code_true"] + rng.integers(-3, 4, len(B)) + noisy_member * extra
-    B["age_obs"] = B["age_true"] + rng.normal(0, 1.3 + 0.6 * ambiguity, len(B)) + noisy_member * rng.normal(
-        0, 0.8 * ambiguity, len(B)
+    B["fname_obs"] = (
+        B["first_name_code_true"] + rng.integers(-3, 4, len(B)) + noisy_member * extra
+    )
+    B["age_obs"] = (
+        B["age_true"]
+        + rng.normal(0, 1.3 + 0.6 * ambiguity, len(B))
+        + noisy_member * rng.normal(0, 0.8 * ambiguity, len(B))
     )
     B["b_group_id"] = B["latent_group_id"]
 
@@ -251,7 +259,9 @@ def run_scale_experiment(
                 ambiguity=ambiguity,
                 seed=run + n_groups * 1000,
             )
-            A, B = make_noisy_files(pop, ambiguity=ambiguity, seed=run + n_groups * 1000 + 10000)
+            A, B = make_noisy_files(
+                pop, ambiguity=ambiguity, seed=run + n_groups * 1000 + 10000
+            )
             scores = pair_score_matrix(A, B)
             hierarchy = HierarchySpec.from_dataframe(A, B, "a_group_id", "b_group_id")
 
@@ -314,7 +324,9 @@ def run_fine_ambiguity_sweep(
 
 def generate_diagnostic_showcase(output_dir: Path) -> None:
     """Generate all diagnostic artifacts for paper appendix."""
-    pop = simulate_variable_sizes(n_groups=30, size_distribution=[2, 3], ambiguity=1.5, seed=42)
+    pop = simulate_variable_sizes(
+        n_groups=30, size_distribution=[2, 3], ambiguity=1.5, seed=42
+    )
     A, B = make_noisy_files(pop, ambiguity=1.5, seed=1042)
     scores = pair_score_matrix(A, B)
     hierarchy = HierarchySpec.from_dataframe(A, B, "a_group_id", "b_group_id")
@@ -326,15 +338,19 @@ def generate_diagnostic_showcase(output_dir: Path) -> None:
         pid = row["latent_person_id"]
         for b_idx, b_row in B.iterrows():
             if b_row["latent_person_id"] == pid:
-                ground_truth.append((int(idx), int(b_idx)))  # type: ignore[arg-type]
+                ground_truth.append((int(idx), int(b_idx)))
                 break
 
     report = MatchReport(
         result=result,
         scores=scores,
         ground_truth=ground_truth,
-        source_groups={int(k): [int(x) for x in v] for k, v in hierarchy.source_groups.items()},
-        target_groups={int(k): [int(x) for x in v] for k, v in hierarchy.target_groups.items()},
+        source_groups={
+            int(k): [int(x) for x in v] for k, v in hierarchy.source_groups.items()
+        },
+        target_groups={
+            int(k): [int(x) for x in v] for k, v in hierarchy.target_groups.items()
+        },
     )
 
     diag_dir = output_dir / "diagnostics"
@@ -353,7 +369,14 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=Path("results/extended"))
     parser.add_argument(
         "--experiment",
-        choices=["variable_sizes", "weight_sensitivity", "scale", "fine_sweep", "diagnostics", "all"],
+        choices=[
+            "variable_sizes",
+            "weight_sensitivity",
+            "scale",
+            "fine_sweep",
+            "diagnostics",
+            "all",
+        ],
         default="all",
     )
     args = parser.parse_args()

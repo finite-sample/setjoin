@@ -11,8 +11,7 @@ def greedy_match(
     scores: ScoreMatrix,
     show_progress: bool = False,
 ) -> MatchResult:
-    """
-    Match records greedily by selecting highest-scoring pairs first.
+    """Match records greedily by selecting highest-scoring pairs first.
 
     Args:
         scores: Pairwise score matrix (n_source x n_target)
@@ -50,8 +49,7 @@ def greedy_match(
 def hungarian_match(
     scores: ScoreMatrix,
 ) -> MatchResult:
-    """
-    Match records using Hungarian algorithm to maximize total score.
+    """Match records using Hungarian algorithm to maximize total score.
 
     Args:
         scores: Pairwise score matrix (n_source x n_target)
@@ -75,8 +73,7 @@ def structure_aware_match(
     hierarchy: HierarchySpec,
     show_progress: bool = False,
 ) -> MatchResult:
-    """
-    Match records while preserving group structure.
+    """Match records while preserving group structure.
 
     Two-level assignment: first assign groups optimally, then assign records
     within matched groups. This ensures all members of a source group
@@ -130,8 +127,7 @@ def match(
     hierarchy: HierarchySpec | None = None,
     show_progress: bool = False,
 ) -> MatchResult:
-    """
-    Match records using the specified method.
+    """Match records using the specified method.
 
     Args:
         scores: Pairwise score matrix (n_source x n_target)
@@ -147,16 +143,15 @@ def match(
     """
     if method == "greedy":
         return greedy_match(scores, show_progress=show_progress)
-    elif method == "hungarian":
+    if method == "hungarian":
         return hungarian_match(scores)
-    elif method == "structure_aware":
+    if method == "structure_aware":
         if hierarchy is None:
             raise ValueError("hierarchy is required for structure_aware matching")
         return structure_aware_match(scores, hierarchy, show_progress=show_progress)
-    else:
-        raise ValueError(
-            f"Unknown method: {method}. Use 'greedy', 'hungarian', or 'structure_aware'"
-        )
+    raise ValueError(
+        f"Unknown method: {method}. Use 'greedy', 'hungarian', or 'structure_aware'"
+    )
 
 
 def compare_methods(
@@ -164,8 +159,7 @@ def compare_methods(
     hierarchy: HierarchySpec | None = None,
     methods: list[str] | None = None,
 ) -> dict[str, MatchResult]:
-    """
-    Run multiple matching methods and return results for comparison.
+    """Run multiple matching methods and return results for comparison.
 
     Args:
         scores: Pairwise score matrix (n_source x n_target)

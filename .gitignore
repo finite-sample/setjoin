@@ -39,11 +39,6 @@ htmlcov/
 .tox/
 .nox/
 
-# Type checking
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
 # Linting
 .ruff_cache/
 
@@ -65,7 +60,8 @@ docs/_build/
 .DS_Store
 Thumbs.db
 
-# uv
-uv.lock
+# Docs preview
+_site/
+
 ms/main.bcf
 ms/main.run.xml

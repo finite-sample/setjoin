@@ -40,6 +40,7 @@ class MatchResult:
     """Additional metadata about the matching process."""
 
     def __len__(self) -> int:
+        """Return the number of matched pairs."""
         return len(self.matches)
 
     def to_dataframe(self) -> pd.DataFrame:
@@ -74,6 +75,7 @@ class GroupSpec:
     """Record indices belonging to this group."""
 
     def __len__(self) -> int:
+        """Return the number of records in the group."""
         return len(self.indices)
 
 

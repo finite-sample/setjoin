@@ -2,7 +2,7 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/setjoin.svg)](https://pypi.org/project/setjoin/)
 [![Python versions](https://img.shields.io/pypi/pyversions/setjoin.svg)](https://pypi.org/project/setjoin/)
-[![License](https://img.shields.io/pypi/l/setjoin.svg)](https://github.com/finite-sample/setjoin/blob/main/LICENSE)
+[![License](https://img.shields.io/pypi/l/setjoin.svg)](LICENSE)
 [![CI](https://github.com/finite-sample/setjoin/actions/workflows/ci.yml/badge.svg)](https://github.com/finite-sample/setjoin/actions/workflows/ci.yml)
 
 Record linkage that keeps groups together. Match persons while preserving household membership, students while respecting school assignments, or any hierarchical data where group integrity matters.
@@ -72,12 +72,14 @@ import numpy as np
 from setjoin import match, HierarchySpec
 
 # Score matrix: how well does each source record match each target?
-scores = np.array([
-    [10.0, 2.0, 1.0, 1.0],  # Person A scores high with targets 0,1
-    [9.0, 10.0, 1.0, 1.0],  # Person B scores high with targets 0,1
-    [1.0, 1.0, 10.0, 2.0],  # Person C scores high with targets 2,3
-    [1.0, 1.0, 9.0, 10.0],  # Person D scores high with targets 2,3
-])
+scores = np.array(
+    [
+        [10.0, 2.0, 1.0, 1.0],  # Person A scores high with targets 0,1
+        [9.0, 10.0, 1.0, 1.0],  # Person B scores high with targets 0,1
+        [1.0, 1.0, 10.0, 2.0],  # Person C scores high with targets 2,3
+        [1.0, 1.0, 9.0, 10.0],  # Person D scores high with targets 2,3
+    ]
+)
 
 # Define household structure: persons 0,1 are in household 0; persons 2,3 in household 1
 hierarchy = HierarchySpec(
@@ -99,11 +101,13 @@ print(result.group_assignments)  # {0: 0, 1: 1} - household mappings
 import numpy as np
 from setjoin import hungarian_match, greedy_match
 
-scores = np.array([
-    [10.0, 1.0, 1.0],
-    [1.0, 10.0, 1.0],
-    [1.0, 1.0, 10.0],
-])
+scores = np.array(
+    [
+        [10.0, 1.0, 1.0],
+        [1.0, 10.0, 1.0],
+        [1.0, 1.0, 10.0],
+    ]
+)
 
 # Optimal global assignment
 result = hungarian_match(scores)
@@ -123,10 +127,12 @@ from setjoin import Scorer, FieldConfig
 source = pd.DataFrame({"age": [25, 30, 35], "income": [50000, 60000, 70000]})
 target = pd.DataFrame({"age": [26, 31, 34], "income": [51000, 59000, 72000]})
 
-scorer = Scorer({
-    "age": FieldConfig(weight=1.0, comparator="abs_diff"),
-    "income": FieldConfig(weight=0.001, comparator="abs_diff"),
-})
+scorer = Scorer(
+    {
+        "age": FieldConfig(weight=1.0, comparator="abs_diff"),
+        "income": FieldConfig(weight=0.001, comparator="abs_diff"),
+    }
+)
 scores = scorer.score(source, target)
 ```
 
@@ -137,29 +143,36 @@ import pandas as pd
 from setjoin import match, HierarchySpec, Scorer, FieldConfig
 
 # Survey data with household IDs
-survey = pd.DataFrame({
-    "household_id": [1, 1, 2, 2],
-    "age": [35, 10, 45, 42],
-    "income": [50000, 0, 60000, 58000],
-})
+survey = pd.DataFrame(
+    {
+        "household_id": [1, 1, 2, 2],
+        "age": [35, 10, 45, 42],
+        "income": [50000, 0, 60000, 58000],
+    }
+)
 
 # Admin records with household IDs
-admin = pd.DataFrame({
-    "household_id": [101, 101, 102, 102],
-    "age": [36, 11, 44, 43],
-    "income": [51000, 0, 59000, 57000],
-})
+admin = pd.DataFrame(
+    {
+        "household_id": [101, 101, 102, 102],
+        "age": [36, 11, 44, 43],
+        "income": [51000, 0, 59000, 57000],
+    }
+)
 
 # Build score matrix (higher = better match, abs_diff returns negative distances)
-scorer = Scorer({
-    "age": FieldConfig(weight=1.0, comparator="abs_diff"),
-    "income": FieldConfig(weight=0.0001, comparator="abs_diff"),
-})
+scorer = Scorer(
+    {
+        "age": FieldConfig(weight=1.0, comparator="abs_diff"),
+        "income": FieldConfig(weight=0.0001, comparator="abs_diff"),
+    }
+)
 scores = scorer.score(survey, admin)
 
 # Define hierarchy from dataframes
 hierarchy = HierarchySpec.from_dataframe(
-    survey, admin,
+    survey,
+    admin,
     source_group_col="household_id",
     target_group_col="household_id",
 )
@@ -174,10 +187,12 @@ result = match(scores, method="structure_aware", hierarchy=hierarchy)
 import numpy as np
 from setjoin import soft_match
 
-scores = np.array([
-    [10.0, 9.0],
-    [9.0, 10.0],
-])
+scores = np.array(
+    [
+        [10.0, 9.0],
+        [9.0, 10.0],
+    ]
+)
 
 # Get probabilistic weights instead of hard assignments
 weights = soft_match(scores, regularization=0.5)
@@ -196,9 +211,7 @@ scores = np.eye(100) * 10  # 100 records
 source_df = pd.DataFrame({"region": ["north"] * 60 + ["south"] * 40})
 
 # Target: 50/50 split, not the 60/40 in source
-calibration = CalibrationSpec(
-    margins={"region": {"north": 0.5, "south": 0.5}}
-)
+calibration = CalibrationSpec(margins={"region": {"north": 0.5, "south": 0.5}})
 
 result = calibrated_match(scores, source_df, calibration)
 print(result.weights)  # Calibration weights for each match

@@ -4,11 +4,11 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
-from numpy.typing import NDArray
 
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
+    from numpy.typing import NDArray
 
 from setjoin.diagnostics import MatchReport
 from setjoin.types import MatchResult, ScoreMatrix
@@ -27,6 +27,13 @@ def _get_plt() -> Any:
         ) from None
 
 
+def _figure_and_axes(ax: "Axes | None", **kwargs: Any) -> tuple[Any, Any]:
+    """Return the (figure, axes) pair to draw on, creating one if ax is None."""
+    if ax is None:
+        return _get_plt().subplots(**kwargs)
+    return ax.figure, ax
+
+
 def plot_score_heatmap(
     scores: ScoreMatrix,
     matches: list[tuple[int, int]] | None = None,
@@ -34,8 +41,7 @@ def plot_score_heatmap(
     cmap: str = "viridis",
     mark_matches: bool = True,
 ) -> "Figure":
-    """
-    Plot score matrix as a heatmap with optional match overlay.
+    """Plot score matrix as a heatmap with optional match overlay.
 
     Args:
         scores: Score matrix (n_source x n_target)
@@ -47,25 +53,20 @@ def plot_score_heatmap(
     Returns:
         Figure: Matplotlib figure with heatmap
     """
-    plt = _get_plt()
+    fig, axes = _figure_and_axes(ax, figsize=(10, 8))
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(10, 8))
-    else:
-        fig = ax.figure
-
-    im = ax.imshow(scores, cmap=cmap, aspect="auto")
-    fig.colorbar(im, ax=ax, label="Score")
+    im = axes.imshow(scores, cmap=cmap, aspect="auto")
+    fig.colorbar(im, ax=axes, label="Score")
 
     if matches and mark_matches:
         src_idx, tgt_idx = zip(*matches, strict=True)
-        ax.scatter(tgt_idx, src_idx, c="red", marker="x", s=50, linewidths=2)
+        axes.scatter(tgt_idx, src_idx, c="red", marker="x", s=50, linewidths=2)
 
-    ax.set_xlabel("Target index")
-    ax.set_ylabel("Source index")
-    ax.set_title("Score Matrix")
+    axes.set_xlabel("Target index")
+    axes.set_ylabel("Source index")
+    axes.set_title("Score Matrix")
 
-    return fig  # type: ignore[no-any-return]
+    return fig
 
 
 def plot_match_comparison(
@@ -75,8 +76,7 @@ def plot_match_comparison(
     label2: str = "Method 2",
     ax: "Axes | None" = None,
 ) -> "Figure":
-    """
-    Compare scores of matches between two methods.
+    """Compare scores of matches between two methods.
 
     Args:
         report1: First method's report
@@ -88,30 +88,25 @@ def plot_match_comparison(
     Returns:
         Figure: Matplotlib figure with comparison
     """
-    plt = _get_plt()
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 6))
-    else:
-        fig = ax.figure
+    fig, axes = _figure_and_axes(ax, figsize=(8, 6))
 
     conf1 = report1.match_confidence()
     conf2 = report2.match_confidence()
 
-    ax.hist(conf1["score"], bins=30, alpha=0.5, label=label1)
-    ax.hist(conf2["score"], bins=30, alpha=0.5, label=label2)
+    axes.hist(conf1["score"], bins=30, alpha=0.5, label=label1)
+    axes.hist(conf2["score"], bins=30, alpha=0.5, label=label2)
 
     mean1 = conf1["score"].mean()
     mean2 = conf2["score"].mean()
-    ax.axvline(mean1, color="blue", linestyle="--", label=f"{label1} mean")
-    ax.axvline(mean2, color="orange", linestyle="--", label=f"{label2} mean")
+    axes.axvline(mean1, color="blue", linestyle="--", label=f"{label1} mean")
+    axes.axvline(mean2, color="orange", linestyle="--", label=f"{label2} mean")
 
-    ax.set_xlabel("Match Score")
-    ax.set_ylabel("Count")
-    ax.set_title("Match Score Distribution Comparison")
-    ax.legend()
+    axes.set_xlabel("Match Score")
+    axes.set_ylabel("Count")
+    axes.set_title("Match Score Distribution Comparison")
+    axes.legend()
 
-    return fig  # type: ignore[no-any-return]
+    return fig
 
 
 def plot_method_comparison_bar(
@@ -119,8 +114,7 @@ def plot_method_comparison_bar(
     metric: str = "total_score",
     ax: "Axes | None" = None,
 ) -> "Figure":
-    """
-    Bar chart comparing a metric across methods.
+    """Bar chart comparing a metric across methods.
 
     Args:
         results: Dictionary of method name to MatchResult
@@ -134,11 +128,7 @@ def plot_method_comparison_bar(
         ValueError: If metric is unknown
     """
     plt = _get_plt()
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 5))
-    else:
-        fig = ax.figure
+    fig, axes = _figure_and_axes(ax, figsize=(8, 5))
 
     methods = list(results.keys())
     if metric == "total_score":
@@ -150,20 +140,19 @@ def plot_method_comparison_bar(
     else:
         raise ValueError(f"Unknown metric: {metric}")
 
-    ax.bar(methods, values)
-    ax.set_ylabel(ylabel)
-    ax.set_title(f"{ylabel} by Method")
+    axes.bar(methods, values)
+    axes.set_ylabel(ylabel)
+    axes.set_title(f"{ylabel} by Method")
     plt.xticks(rotation=15)
 
-    return fig  # type: ignore[no-any-return]
+    return fig
 
 
 def plot_confidence_distribution(
     report: MatchReport,
     ax: "Axes | None" = None,
 ) -> "Figure":
-    """
-    Plot distribution of match confidence (margin to second-best).
+    """Plot distribution of match confidence (margin to second-best).
 
     Args:
         report: MatchReport to analyze
@@ -172,28 +161,23 @@ def plot_confidence_distribution(
     Returns:
         Figure: Matplotlib figure with distribution
     """
-    plt = _get_plt()
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 5))
-    else:
-        fig = ax.figure
+    fig, axes = _figure_and_axes(ax, figsize=(8, 5))
 
     conf = report.match_confidence()
     margins = conf["margin"].replace([np.inf, -np.inf], np.nan).dropna()
 
-    ax.hist(margins, bins=30, edgecolor="black")
+    axes.hist(margins, bins=30, edgecolor="black")
     median_val = margins.median()
-    ax.axvline(
+    axes.axvline(
         median_val, color="red", linestyle="--", label=f"Median: {median_val:.2f}"
-    )  # noqa: E501
+    )
 
-    ax.set_xlabel("Margin (score - second best)")
-    ax.set_ylabel("Count")
-    ax.set_title("Match Confidence Distribution")
-    ax.legend()
+    axes.set_xlabel("Margin (score - second best)")
+    axes.set_ylabel("Count")
+    axes.set_title("Match Confidence Distribution")
+    axes.legend()
 
-    return fig  # type: ignore[no-any-return]
+    return fig
 
 
 def plot_accuracy_by_ambiguity(
@@ -203,8 +187,7 @@ def plot_accuracy_by_ambiguity(
     metric: str = "record_accuracy",
     ax: "Axes | None" = None,
 ) -> "Figure":
-    """
-    Plot accuracy metric vs ambiguity level for multiple methods.
+    """Plot accuracy metric vs ambiguity level for multiple methods.
 
     Args:
         data: DataFrame or list of dicts with columns [method, ambiguity, <metric>]
@@ -217,27 +200,22 @@ def plot_accuracy_by_ambiguity(
         Figure: Matplotlib figure with accuracy plot
     """
     _ = ambiguity_values
-    plt = _get_plt()
-
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 5))
-    else:
-        fig = ax.figure
+    fig, axes = _figure_and_axes(ax, figsize=(8, 5))
 
     df = pd.DataFrame(data)
 
     for method in methods:
         method_data = df[df["method"] == method].sort_values(by="ambiguity")
-        ax.plot(
+        axes.plot(
             method_data["ambiguity"],
             method_data[metric],
             marker="o",
             label=method,
         )
 
-    ax.set_xlabel("Ambiguity Level")
-    ax.set_ylabel(metric.replace("_", " ").title())
-    ax.set_title(f"{metric.replace('_', ' ').title()} vs Ambiguity")
-    ax.legend()
+    axes.set_xlabel("Ambiguity Level")
+    axes.set_ylabel(metric.replace("_", " ").title())
+    axes.set_title(f"{metric.replace('_', ' ').title()} vs Ambiguity")
+    axes.legend()
 
-    return fig  # type: ignore[no-any-return]
+    return fig
