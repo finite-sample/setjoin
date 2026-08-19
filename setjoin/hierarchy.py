@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, SupportsInt, cast
 
 import numpy as np
 import pandas as pd
@@ -13,8 +13,7 @@ from setjoin.types import GroupSpec
 
 @dataclass
 class HierarchySpec:
-    """
-    Specification of hierarchical structure for record groups.
+    """Specification of hierarchical structure for record groups.
 
     This defines how records are grouped (e.g., persons within households,
     students within schools, items within orders) for structure-preserving matching.
@@ -34,8 +33,7 @@ class HierarchySpec:
         source_group_col: str,
         target_group_col: str,
     ) -> "HierarchySpec":
-        """
-        Create HierarchySpec from DataFrames with group columns.
+        """Create HierarchySpec from DataFrames with group columns.
 
         Args:
             source: Source DataFrame
@@ -48,11 +46,11 @@ class HierarchySpec:
         """
         source_groups: dict[int, Sequence[int]] = {}
         for group_id, group_df in source.groupby(source_group_col):
-            source_groups[int(group_id)] = list(group_df.index)  # type: ignore[arg-type]
+            source_groups[int(cast("SupportsInt", group_id))] = list(group_df.index)
 
         target_groups: dict[int, Sequence[int]] = {}
         for group_id, group_df in target.groupby(target_group_col):
-            target_groups[int(group_id)] = list(group_df.index)  # type: ignore[arg-type]
+            target_groups[int(cast("SupportsInt", group_id))] = list(group_df.index)
 
         return cls(source_groups=source_groups, target_groups=target_groups)
 
@@ -62,8 +60,7 @@ class HierarchySpec:
         source_groupby: Any,
         target_groupby: Any,
     ) -> "HierarchySpec":
-        """
-        Create HierarchySpec from pandas GroupBy objects.
+        """Create HierarchySpec from pandas GroupBy objects.
 
         Args:
             source_groupby: GroupBy object for source records
@@ -123,8 +120,7 @@ def compute_group_score_matrix(
     hierarchy: HierarchySpec,
     record_scores: NDArray[np.float64],
 ) -> tuple[NDArray[np.float64], dict[tuple[int, int], list[tuple[int, int]]]]:
-    """
-    Compute score matrix at the group level with optimal within-group assignments.
+    """Compute score matrix at the group level with optimal within-group assignments.
 
     For each pair of (source_group, target_group), computes the optimal assignment
     of records within those groups and returns the total score.
@@ -177,8 +173,7 @@ def compute_group_score_matrix(
 def decompose_by_size(
     hierarchy: HierarchySpec,
 ) -> dict[tuple[int, int], tuple[list[int], list[int]]]:
-    """
-    Decompose groups by size for efficient matching.
+    """Decompose groups by size for efficient matching.
 
     Groups source and target groups by their sizes to enable size-aware matching
     strategies.

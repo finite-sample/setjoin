@@ -10,20 +10,19 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
-import pandas as pd
-from numpy.typing import NDArray
-
-from setjoin.hierarchy import HierarchySpec
-from setjoin.types import ScoreMatrix
 
 if TYPE_CHECKING:
+    import pandas as pd
+    from numpy.typing import NDArray
+
     from setjoin.calibration import CalibrationSpec
+    from setjoin.hierarchy import HierarchySpec
+    from setjoin.types import ScoreMatrix
 
 
 @dataclass
 class MatchWeights:
-    """
-    Soft assignment matrix from entropy-regularized optimal transport.
+    """Soft assignment matrix from entropy-regularized optimal transport.
 
     Instead of hard 1-to-1 assignments, this holds a weight matrix where
     entry (i, j) represents the probability/weight that source i matches target j.
@@ -43,10 +42,12 @@ class MatchWeights:
 
     @property
     def n_source(self) -> int:
+        """Number of source records."""
         return int(self.matrix.shape[0])
 
     @property
     def n_target(self) -> int:
+        """Number of target records."""
         return int(self.matrix.shape[1])
 
     def row_sums(self) -> NDArray[np.float64]:
@@ -62,8 +63,7 @@ class MatchWeights:
     def nonzero_for(
         self, source_idx: int, threshold: float = 1e-6
     ) -> list[tuple[int, float]]:
-        """
-        Get non-zero target indices and weights for a source record.
+        """Get non-zero target indices and weights for a source record.
 
         Args:
             source_idx: Index of source record
@@ -78,8 +78,7 @@ class MatchWeights:
         return [(int(idx), float(row[idx])) for idx in indices]
 
     def to_hard(self, threshold: float = 0.5) -> list[tuple[int, int]]:
-        """
-        Convert soft weights to hard 1-to-1 assignment by thresholding.
+        """Convert soft weights to hard 1-to-1 assignment by thresholding.
 
         Args:
             threshold: Minimum weight to count as a match
@@ -99,8 +98,7 @@ class MatchWeights:
         return matches
 
     def to_hard_hungarian(self) -> list[tuple[int, int]]:
-        """
-        Convert soft weights to hard 1-to-1 assignment using Hungarian algorithm.
+        """Convert soft weights to hard 1-to-1 assignment using Hungarian algorithm.
 
         This uses the soft weights as scores for optimal assignment.
 
@@ -113,8 +111,7 @@ class MatchWeights:
         return list(zip(rows.tolist(), cols.tolist(), strict=True))
 
     def expected_score(self, scores: ScoreMatrix) -> float:
-        """
-        Compute expected total score under soft assignment.
+        """Compute expected total score under soft assignment.
 
         Args:
             scores: Original pairwise score matrix
@@ -132,8 +129,7 @@ def soft_match(
     convergence_threshold: float = 1e-8,
     hierarchy: HierarchySpec | None = None,
 ) -> MatchWeights:
-    """
-    Compute soft matching weights using Sinkhorn algorithm.
+    """Compute soft matching weights using Sinkhorn algorithm.
 
     Uses entropy-regularized optimal transport to produce a doubly-stochastic
     weight matrix. Higher regularization produces softer (more uniform) weights;
@@ -176,8 +172,7 @@ def _sinkhorn(
     max_iterations: int,
     convergence_threshold: float,
 ) -> MatchWeights:
-    """
-    Log-domain Sinkhorn algorithm for entropy-regularized optimal transport.
+    """Log-domain Sinkhorn algorithm for entropy-regularized optimal transport.
 
     Solves: max sum_{ij} w_ij * s_ij - reg * sum_{ij} w_ij * log(w_ij)
     subject to: row sums = 1, col sums = 1, w_ij >= 0
@@ -189,7 +184,7 @@ def _sinkhorn(
     if regularization <= 0:
         raise ValueError("regularization must be positive")
 
-    C = scores / regularization
+    cost = scores / regularization
 
     f = np.zeros(n, dtype=np.float64)
     g = np.zeros(m, dtype=np.float64)
@@ -202,14 +197,14 @@ def _sinkhorn(
 
         f_prev = f.copy()
 
-        g = -_logsumexp(C + f[:, np.newaxis], axis=0)
-        f = -_logsumexp(C + g[np.newaxis, :], axis=1)
+        g = -_logsumexp(cost + f[:, np.newaxis], axis=0)
+        f = -_logsumexp(cost + g[np.newaxis, :], axis=1)
 
         if np.max(np.abs(f - f_prev)) < convergence_threshold:
             converged = True
             break
 
-    log_transport = C + f[:, np.newaxis] + g[np.newaxis, :]
+    log_transport = cost + f[:, np.newaxis] + g[np.newaxis, :]
     transport = np.exp(log_transport)
 
     transport = np.clip(transport, 0, None)
@@ -232,8 +227,7 @@ def _soft_match_hierarchical(
     convergence_threshold: float,
     hierarchy: HierarchySpec,
 ) -> MatchWeights:
-    """
-    Structure-aware soft matching.
+    """Structure-aware soft matching.
 
     Applies Sinkhorn within each group pair, then aggregates.
     """
@@ -299,8 +293,7 @@ def soft_match_with_calibration(
     convergence_threshold: float = 1e-8,
     hierarchy: HierarchySpec | None = None,
 ) -> MatchWeights:
-    """
-    Soft matching with calibration penalty incorporated into objective.
+    """Soft matching with calibration penalty incorporated into objective.
 
     This modifies the score matrix to penalize selections that deviate
     from target calibration proportions.

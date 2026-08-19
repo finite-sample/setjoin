@@ -1,6 +1,7 @@
 """Configurable scoring functions for record comparison."""
 
 from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -92,10 +93,9 @@ def _jaro_similarity(s1: str, s2: str) -> float:
             transpositions += 1
         k += 1
 
-    jaro = (
+    return (
         matches / len1 + matches / len2 + (matches - transpositions / 2) / matches
     ) / 3
-    return jaro
 
 
 def _jaro_winkler_similarity(s1: str, s2: str, prefix_weight: float = 0.1) -> float:
@@ -119,31 +119,30 @@ def jaro_winkler(a: NDArray[np.object_], b: NDArray[np.object_]) -> NDArray[np.f
     return result
 
 
-ComparatorType = Callable[
-    [NDArray[np.object_], NDArray[np.object_]], NDArray[np.float64]
-]
+# abs_diff takes float arrays while the string comparators take object arrays,
+# so the shared alias is written over the common supertype of both.
+ComparatorType = Callable[[NDArray[Any], NDArray[Any]], NDArray[np.float64]]
 
 COMPARATORS: dict[str, ComparatorType] = {
     "exact": exact_match,
-    "abs_diff": abs_diff,  # type: ignore[dict-item]
+    "abs_diff": abs_diff,
     "levenshtein": levenshtein,
     "jaro_winkler": jaro_winkler,
 }
 
 
 class Scorer:
-    """
-    Configurable scorer for computing pairwise similarity between records.
-
-    Args:
-        config: Mapping from field name to configuration.
-            Each value can be a FieldConfig or a dict with keys:
-            - weight: float (default 1.0)
-            - comparator: str (default "exact")
-            - missing_value: float (default 0.0)
-    """
+    """Configurable scorer for computing pairwise similarity between records."""
 
     def __init__(self, config: dict[str, dict[str, float | str] | FieldConfig]) -> None:
+        """Build the scorer from a per-field configuration mapping.
+
+        Args:
+            config: Mapping from field name to configuration. Each value can
+                be a FieldConfig or a dict with keys: weight (float, default
+                1.0), comparator (str, default "exact"), and missing_value
+                (float, default 0.0).
+        """
         self.fields: dict[str, FieldConfig] = {}
         for name, cfg in config.items():
             if isinstance(cfg, FieldConfig):
@@ -162,8 +161,7 @@ class Scorer:
         source_suffix: str = "",
         target_suffix: str = "",
     ) -> ScoreMatrix:
-        """
-        Compute pairwise score matrix between source and target records.
+        """Compute pairwise score matrix between source and target records.
 
         Args:
             source: DataFrame with source records
@@ -197,7 +195,7 @@ class Scorer:
             if cfg.comparator == "abs_diff":
                 a_f = a.astype(np.float64)[:, None]
                 b_f = b.astype(np.float64)[None, :]
-                field_score = comparator_fn(a_f, b_f)  # type: ignore[arg-type]
+                field_score = comparator_fn(a_f, b_f)
             else:
                 a_obj = a.astype(object)
                 b_obj = b.astype(object)
@@ -226,8 +224,7 @@ def score_matrix(
     weights: dict[str, float],
     comparators: dict[str, str] | None = None,
 ) -> ScoreMatrix:
-    """
-    Convenience function to compute a score matrix with simple configuration.
+    """Convenience function to compute a score matrix with simple configuration.
 
     Args:
         source: Source DataFrame

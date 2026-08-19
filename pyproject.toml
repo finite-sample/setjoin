@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Set-aware record linkage with structure-preserving joins"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 authors = [{ name = "Gaurav Sood" }]
 keywords = [
@@ -16,11 +17,11 @@ keywords = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
     "Typing :: Typed",
 ]
@@ -33,20 +34,6 @@ dependencies = [
 
 [project.optional-dependencies]
 viz = ["matplotlib>=3.8"]
-dev = [
-    "pytest>=8.0",
-    "mypy>=1.8",
-    "ruff>=0.4",
-    "pandas-stubs>=2.0",
-    "vulture>=2.11",
-    "bandit>=1.7",
-    "pydoclint>=0.5",
-]
-docs = [
-    "sphinx>=7.2",
-    "furo>=2024.1",
-]
-all = ["setjoin[viz,dev,docs]"]
 
 [project.urls]
 Homepage = "https://github.com/finite-sample/setjoin"
@@ -55,44 +42,77 @@ Repository = "https://github.com/finite-sample/setjoin"
 Issues = "https://github.com/finite-sample/setjoin/issues"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["setjoin"]
+requires = ["uv_build>=0.12.5,<0.13"]
+build-backend = "uv_build"
 
 [tool.ruff]
-target-version = "py312"
 line-length = 88
+target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+external = ["DOC"]
+select = [
+    "E", "W", "F", "I", "B", "C4", "UP", "N", "D", "S", "SIM", "T20", "PT", "RUF",
+    "PTH", "RET", "PIE", "FURB", "PERF", "DTZ", "LOG", "G", "TC", "FLY",
+    "RSE", "SLOT", "FA", "A", "EXE", "ICN", "PGH", "PLE", "ARG", "SLF",
+]
+# D203/D213: the google convention the fleet standard picks. W191/D206/D300:
+# ruff's own docs list these as always incompatible with `ruff format`, which
+# the standard also runs.
+ignore = ["D203", "D213", "W191", "D206", "D300"]
 
-[tool.mypy]
-python_version = "3.12"
-strict = true
-warn_return_any = true
-warn_unused_ignores = true
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
-[[tool.mypy.overrides]]
-module = ["scipy.*", "matplotlib.*"]
-ignore_missing_imports = true
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "D", "ARG", "SLF"]
+"ms/scripts/test_*.py" = ["S101", "D", "ARG", "SLF"]
+"docs/**" = ["D"]
+# ms/ reproduces the paper, not the library. `A`/`B` are the two files being
+# linked in the paper's own notation, the scripts report progress on stdout,
+# and their helpers are internal to a single run rather than a public API.
+"ms/**" = ["N803", "N806", "T201", "D103"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
 
-[tool.vulture]
-paths = ["setjoin"]
-min_confidence = 95
-
-[tool.bandit]
-targets = ["setjoin"]
-skips = []
+# Flat layout, so name the package explicitly: a bare `--cov` would otherwise
+# measure the whole working tree, ms/ scripts included.
+[tool.coverage.run]
+source = ["setjoin"]
 
 [tool.pydoclint]
 style = "google"
 arg-type-hints-in-docstring = false
+check-return-types = false
+check-class-attributes = false
+allow-init-docstring = true
+exclude = '\.venv|tests|docs'
 arg-type-hints-in-signature = true
-check-return-types = true
 check-yield-types = true
+
+[tool.pyright]
+include = ["setjoin"]
+typeCheckingMode = "standard"
+
+[tool.uv.build-backend]
+module-name = "setjoin"
+module-root = ""
+
+[dependency-groups]
+docs = [
+    "sphinx>=8",
+    "furo",
+    "myst-parser",
+    "sphinx-copybutton",
+    "py-canon @ git+https://github.com/gojiplus/py-canon@v1",
+]
+test = ["pytest>=8", "pytest-cov>=6"]
+dev = [
+    { include-group = "test" },
+    "ruff>=0.14",
+    "pyright>=1.1.390",
+    "pydoclint>=0.5",
+    "pandas-stubs>=2.0",
+]

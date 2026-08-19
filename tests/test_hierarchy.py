@@ -84,7 +84,7 @@ class TestComputeGroupScoreMatrix:
             target_groups={0: [0], 1: [1]},
         )
 
-        group_scores, within_matches = compute_group_score_matrix(hierarchy, scores)
+        group_scores, _within_matches = compute_group_score_matrix(hierarchy, scores)
 
         assert group_scores.shape == (1, 2)
         assert group_scores[0, 0] == 10.0

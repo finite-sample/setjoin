@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """Unit tests for generate_results.py."""
+
 import numpy as np
 import pandas as pd
 import pytest
-
-from setjoin import greedy_match, hungarian_match, structure_aware_match, HierarchySpec
-
 from generate_results import (
     evaluate,
     make_files,
     pair_score_matrix,
     simulate_population,
 )
+
+from setjoin import HierarchySpec, greedy_match, hungarian_match, structure_aware_match
 
 
 class TestSeedNonCollision:

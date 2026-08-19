@@ -17,8 +17,7 @@ from setjoin.types import ScoreMatrix
 
 @dataclass
 class CalibrationSpec:
-    """
-    Specification of target marginal distributions for calibration.
+    """Specification of target marginal distributions for calibration.
 
     Defines the desired distribution of matched records across categories.
     For example, if you know the population should be 30% young, 40% middle-aged,
@@ -40,6 +39,7 @@ class CalibrationSpec:
     """Maximum iterations for raking algorithm."""
 
     def __post_init__(self) -> None:
+        """Validate that each variable's target margins sum to ~1."""
         for var, dist in self.margins.items():
             total = sum(dist.values())
             if abs(total - 1.0) > 0.01:
@@ -53,8 +53,7 @@ class CalibrationSpec:
         tolerance: float = 0.01,
         max_iterations: int = 100,
     ) -> "CalibrationSpec":
-        """
-        Create CalibrationSpec from actual distribution in a DataFrame.
+        """Create CalibrationSpec from actual distribution in a DataFrame.
 
         Args:
             df: DataFrame to extract marginal distributions from
@@ -102,6 +101,7 @@ class CalibratedMatchResult:
     """Number of raking iterations used."""
 
     def __len__(self) -> int:
+        """Return the number of matched pairs."""
         return len(self.matches)
 
     def to_dataframe(self) -> pd.DataFrame:
@@ -117,8 +117,7 @@ def rake_weights(
     source_df: pd.DataFrame,
     calibration: CalibrationSpec,
 ) -> tuple[NDArray[np.float64], dict[str, dict[object, float]], int]:
-    """
-    Compute calibration weights for matched records using iterative raking.
+    """Compute calibration weights for matched records using iterative raking.
 
     Raking (iterative proportional fitting) adjusts weights so that weighted
     marginal distributions match targets.
@@ -192,8 +191,7 @@ def calibrated_match(
     hierarchy: HierarchySpec | None = None,
     show_progress: bool = False,
 ) -> CalibratedMatchResult:
-    """
-    Match records and calibrate weights to hit target marginal distributions.
+    """Match records and calibrate weights to hit target marginal distributions.
 
     This performs standard matching first, then applies iterative raking to
     produce weights that ensure the matched records represent the target
@@ -236,8 +234,7 @@ def compute_calibration_penalty(
     source_df: pd.DataFrame,
     calibration: CalibrationSpec,
 ) -> float:
-    """
-    Compute calibration penalty for a set of matched source indices.
+    """Compute calibration penalty for a set of matched source indices.
 
     This measures how far the current selection deviates from target proportions.
     Lower values indicate better calibration.
