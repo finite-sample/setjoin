@@ -34,6 +34,9 @@ def simulate_variable_sizes(
         size_distribution: List of possible group sizes (sampled uniformly)
         ambiguity: Ambiguity parameter
         seed: Random seed
+
+    Returns:
+        One row per person with group id, features, and true label.
     """
     if size_distribution is None:
         size_distribution = [1, 2, 2, 3, 4]
