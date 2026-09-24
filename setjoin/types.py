@@ -1,6 +1,6 @@
 """Type definitions and protocols for setjoin."""
 
-from collections.abc import Sequence
+from collections.abc import Hashable, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
@@ -33,7 +33,7 @@ class MatchResult:
     method: str
     """Name of the matching method used."""
 
-    group_assignments: dict[int, int] | None = None
+    group_assignments: dict[Hashable, Hashable] | None = None
     """Mapping from source group ID to target group ID (structure-aware)."""
 
     metadata: dict[str, object] = field(default_factory=dict)
@@ -68,7 +68,7 @@ class FieldConfig:
 class GroupSpec:
     """Specification of a group of records."""
 
-    group_id: int
+    group_id: Hashable
     """Identifier for this group."""
 
     indices: Sequence[int]

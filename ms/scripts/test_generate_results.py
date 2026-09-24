@@ -120,7 +120,7 @@ class TestMetrics:
         metrics = evaluate(A, B, matches)
         assert metrics["person_accuracy"] == 1.0
         assert metrics["group_exact_match_rate"] == 1.0
-        assert metrics["abs_bias_treatment_gap"] == 0.0
+        assert metrics["absolute_gap_error"] == 0.0
 
     def test_completely_wrong_match_metrics(self) -> None:
         A = pd.DataFrame(

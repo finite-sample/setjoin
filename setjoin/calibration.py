@@ -4,6 +4,7 @@ This module provides tools to ensure that linked tables match known marginal
 distributions (e.g., age distribution, treatment shares, geographic distribution).
 """
 
+from collections.abc import Hashable
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -91,7 +92,7 @@ class CalibratedMatchResult:
     method: str
     """Name of the matching method used."""
 
-    group_assignments: dict[int, int] | None = None
+    group_assignments: dict[Hashable, Hashable] | None = None
     """Mapping from source group ID to target group ID (structure-aware)."""
 
     calibration_achieved: dict[str, dict[object, float]] = field(default_factory=dict)
@@ -158,7 +159,10 @@ def rake_weights(
 
                 mask_arr = np.asarray(matched_df[var] == category)
                 if not mask_arr.any():
-                    continue
+                    raise ValueError(
+                        f"Cannot calibrate {var}={category!r}: "
+                        "no matched source records"
+                    )
 
                 current_prop = weights[mask_arr].sum() / weights.sum()
                 if current_prop > 0:
@@ -180,6 +184,13 @@ def rake_weights(
         for category in calibration.margins[var]:
             mask_arr = np.asarray(matched_df[var] == category)
             achieved[var][category] = float(weights[mask_arr].sum() / total_weight)
+
+    if any(
+        abs(achieved[var][category] - target_prop) > calibration.tolerance
+        for var, targets in calibration.margins.items()
+        for category, target_prop in targets.items()
+    ):
+        raise ValueError("Calibration did not reach the requested margins")
 
     return weights, achieved, iterations_completed
 

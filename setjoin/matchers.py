@@ -1,6 +1,13 @@
 """Matching algorithms: greedy, Hungarian, and structure-aware."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from scipy.optimize import linear_sum_assignment
+
+if TYPE_CHECKING:
+    from collections.abc import Hashable
 
 from setjoin._logging import track
 from setjoin.hierarchy import HierarchySpec, compute_group_score_matrix
@@ -76,8 +83,8 @@ def structure_aware_match(
     """Match records while preserving group structure.
 
     Two-level assignment: first assign groups optimally, then assign records
-    within matched groups. This ensures all members of a source group
-    map to the same target group.
+    within matched groups. Unequal group counts or sizes can leave records
+    unmatched; their positions are returned in ``metadata``.
 
     Args:
         scores: Pairwise record score matrix (n_source x n_target)
@@ -86,7 +93,18 @@ def structure_aware_match(
 
     Returns:
         MatchResult: Structure-preserving matches
+
+    Raises:
+        ValueError: If the groups do not partition the score-matrix positions
     """
+    for side, groups, expected in (
+        ("source", hierarchy.source_groups, scores.shape[0]),
+        ("target", hierarchy.target_groups, scores.shape[1]),
+    ):
+        positions = [idx for members in groups.values() for idx in members]
+        if len(positions) != expected or set(positions) != set(range(expected)):
+            raise ValueError(f"{side} groups must partition all {side} positions")
+
     group_scores, within_matches = compute_group_score_matrix(hierarchy, scores)
 
     source_ids = hierarchy.source_group_ids
@@ -95,7 +113,7 @@ def structure_aware_match(
     group_rows, group_cols = linear_sum_assignment(-group_scores)
 
     matches: list[tuple[int, int]] = []
-    group_assignments: dict[int, int] = {}
+    group_assignments: dict[Hashable, Hashable] = {}
 
     paired = list(zip(group_rows.tolist(), group_cols.tolist(), strict=True))
     if show_progress:
@@ -118,6 +136,14 @@ def structure_aware_match(
         total_score=total_score,
         method="structure_aware",
         group_assignments=group_assignments,
+        metadata={
+            "unmatched_source": sorted(
+                set(range(scores.shape[0])) - {i for i, _ in matches}
+            ),
+            "unmatched_target": sorted(
+                set(range(scores.shape[1])) - {j for _, j in matches}
+            ),
+        },
     )
 
 

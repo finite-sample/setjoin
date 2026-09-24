@@ -1,6 +1,6 @@
 """Visualization functions for match diagnostics (requires matplotlib)."""
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pandas as pd
@@ -8,7 +8,6 @@ import pandas as pd
 if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
-    from numpy.typing import NDArray
 
 from setjoin.diagnostics import MatchReport
 from setjoin.types import MatchResult, ScoreMatrix
@@ -66,7 +65,7 @@ def plot_score_heatmap(
     axes.set_ylabel("Source index")
     axes.set_title("Score Matrix")
 
-    return fig
+    return cast("Figure", fig)
 
 
 def plot_match_comparison(
@@ -106,7 +105,7 @@ def plot_match_comparison(
     axes.set_title("Match Score Distribution Comparison")
     axes.legend()
 
-    return fig
+    return cast("Figure", fig)
 
 
 def plot_method_comparison_bar(
@@ -145,7 +144,7 @@ def plot_method_comparison_bar(
     axes.set_title(f"{ylabel} by Method")
     plt.xticks(rotation=15)
 
-    return fig
+    return cast("Figure", fig)
 
 
 def plot_confidence_distribution(
@@ -177,11 +176,11 @@ def plot_confidence_distribution(
     axes.set_title("Match Confidence Distribution")
     axes.legend()
 
-    return fig
+    return cast("Figure", fig)
 
 
 def plot_accuracy_by_ambiguity(
-    data: "NDArray[np.floating[Any]] | list[dict[str, float]]",
+    data: pd.DataFrame | list[dict[str, float]],
     methods: list[str],
     ambiguity_values: list[float],
     metric: str = "record_accuracy",
@@ -205,7 +204,7 @@ def plot_accuracy_by_ambiguity(
     df = pd.DataFrame(data)
 
     for method in methods:
-        method_data = df[df["method"] == method].sort_values(by="ambiguity")
+        method_data = df.loc[df["method"].eq(method), :].sort_values(by="ambiguity")
         axes.plot(
             method_data["ambiguity"],
             method_data[metric],
@@ -218,4 +217,4 @@ def plot_accuracy_by_ambiguity(
     axes.set_title(f"{metric.replace('_', ' ').title()} vs Ambiguity")
     axes.legend()
 
-    return fig
+    return cast("Figure", fig)

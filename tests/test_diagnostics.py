@@ -79,6 +79,45 @@ class TestMatchReport:
         )
         assert report.group_exact_match_rate == 0.0
 
+    def test_unmatched_member_is_not_exact_group_recovery(self) -> None:
+        scores = np.eye(3)
+        report = MatchReport(
+            result=MatchResult(
+                matches=[(0, 0), (2, 2)], total_score=2.0, method="test"
+            ),
+            scores=scores,
+            source_groups={"a": [0, 1], "b": [2]},
+            target_groups={"x": [0, 1], "y": [2]},
+        )
+        assert report.group_exact_match_rate == 0.5
+        assert report.score_sacrifice is None
+
+    def test_group_margin_uses_optimal_within_group_assignment(self) -> None:
+        scores = np.array([[10.0, 0.0, 6.0, 0.0], [0.0, 10.0, 0.0, 6.0]])
+        report = MatchReport(
+            result=MatchResult(
+                matches=[(0, 0), (1, 1)],
+                total_score=20.0,
+                method="structure_aware",
+                group_assignments={"a": "x"},
+            ),
+            scores=scores,
+            source_groups={"a": [0, 1]},
+            target_groups={"x": [0, 1], "y": [2, 3]},
+        )
+        row = report.group_margins().iloc[0]
+        assert row["within_score"] == 20.0
+        assert row["best_alternative_score"] == 12.0
+        assert row["margin"] == 8.0
+
+    def test_nonbest_match_has_negative_margin(self) -> None:
+        scores = np.array([[10.0, 8.0, 7.0]])
+        report = MatchReport(
+            result=MatchResult(matches=[(0, 1)], total_score=8.0, method="test"),
+            scores=scores,
+        )
+        assert report.match_confidence().iloc[0]["margin"] == -2.0
+
     def test_match_confidence(self) -> None:
         scores = np.array(
             [
@@ -195,3 +234,15 @@ class TestEvaluateMatches:
             source, target, matches, source_group_col="group", target_group_col="group"
         )
         assert metrics["group_exact_match_rate"] == 1.0
+
+    def test_partial_group_is_not_coherent(self) -> None:
+        source = pd.DataFrame({"latent_person_id": [0, 1], "group": ["a", "a"]})
+        target = pd.DataFrame({"latent_person_id": [0, 1], "group": ["x", "x"]})
+        metrics = evaluate_matches(
+            source,
+            target,
+            [(0, 0)],
+            source_group_col="group",
+            target_group_col="group",
+        )
+        assert metrics["group_exact_match_rate"] == 0.0

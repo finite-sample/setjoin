@@ -117,7 +117,7 @@ def pair_score_matrix(A: pd.DataFrame, B: pd.DataFrame) -> np.ndarray:
 def evaluate(
     A: pd.DataFrame, B: pd.DataFrame, matches: list[tuple[int, int]]
 ) -> dict[str, float]:
-    """Compute linkage quality metrics: person accuracy, group coherence, and bias."""
+    """Compute person accuracy, group recovery, and absolute gap error."""
     rows: list[dict[str, float]] = []
     for i, j in matches:
         a = A.iloc[i]
@@ -151,7 +151,7 @@ def evaluate(
         "person_accuracy": float(df["true_person_match"].mean()),
         "group_accuracy_personlevel": float(df["true_group_match"].mean()),
         "group_exact_match_rate": float(group_exact),
-        "abs_bias_treatment_gap": float(abs(linked_gap - true_gap)),
+        "absolute_gap_error": float(abs(linked_gap - true_gap)),
     }
 
 
@@ -203,9 +203,9 @@ def summarize(df: pd.DataFrame, by: list[str]) -> pd.DataFrame:
             "group_exact_match_rate",
             lambda x: x.std(ddof=1) / np.sqrt(len(x)),
         ),
-        abs_bias_mean=("abs_bias_treatment_gap", "mean"),
-        abs_bias_se=(
-            "abs_bias_treatment_gap",
+        abs_gap_error_mean=("absolute_gap_error", "mean"),
+        abs_gap_error_se=(
+            "absolute_gap_error",
             lambda x: x.std(ddof=1) / np.sqrt(len(x)),
         ),
         group_person_mean=("group_accuracy_personlevel", "mean"),
@@ -228,7 +228,8 @@ def format_table(baseline_summary: pd.DataFrame, table_path: Path) -> None:
     lines.append(r"\begin{tabular}{lccc}")
     lines.append(r"\toprule")
     lines.append(
-        r"Method & Person accuracy & Group exact match rate & Absolute bias \\"
+        "Method & Person accuracy & Group exact match rate & "
+        r"Mean absolute gap error \\"
     )
     lines.append(r"\midrule")
     for _, row in baseline_summary.iterrows():
@@ -236,11 +237,11 @@ def format_table(baseline_summary: pd.DataFrame, table_path: Path) -> None:
             f"{row['method']} & "
             f"{row['person_accuracy_mean']:.3f} ({row['person_accuracy_se']:.3f}) & "
             f"{row['group_exact_mean']:.3f} ({row['group_exact_se']:.3f}) & "
-            f"{row['abs_bias_mean']:.3f} ({row['abs_bias_se']:.3f}) \\\\"
+            f"{row['abs_gap_error_mean']:.3f} ({row['abs_gap_error_se']:.3f}) \\\\"
         )
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
-    table_path.write_text("\n".join(lines), encoding="utf-8")
+    table_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def write_macros(baseline_summary: pd.DataFrame, macro_path: Path) -> None:
@@ -266,9 +267,9 @@ def write_macros(baseline_summary: pd.DataFrame, macro_path: Path) -> None:
         cmd("SetAwareGroupExact", row_s["group_exact_mean"]),
         cmd("HungarianHHExact", row_h["group_exact_mean"]),
         cmd("SetAwareHHExact", row_s["group_exact_mean"]),
-        cmd("GreedyBias", row_g["abs_bias_mean"]),
-        cmd("HungarianBias", row_h["abs_bias_mean"]),
-        cmd("SetAwareBias", row_s["abs_bias_mean"]),
+        cmd("GreedyGapError", row_g["abs_gap_error_mean"]),
+        cmd("HungarianGapError", row_h["abs_gap_error_mean"]),
+        cmd("SetAwareGapError", row_s["abs_gap_error_mean"]),
         cmd(
             "PersonGainVsHungarian",
             row_s["person_accuracy_mean"] - row_h["person_accuracy_mean"],
@@ -279,7 +280,8 @@ def write_macros(baseline_summary: pd.DataFrame, macro_path: Path) -> None:
         ),
         cmd("HHGainVsHungarian", row_s["group_exact_mean"] - row_h["group_exact_mean"]),
         cmd(
-            "BiasReductionVsHungarian", row_h["abs_bias_mean"] - row_s["abs_bias_mean"]
+            "GapErrorReductionVsHungarian",
+            row_h["abs_gap_error_mean"] - row_s["abs_gap_error_mean"],
         ),
     ]
     macro_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -293,17 +295,17 @@ def plot_baseline(summary: pd.DataFrame, out_dir: Path) -> None:
 
     plt.figure(figsize=(6.4, 4.2))
     plt.bar(s["method"], s["group_exact_mean"])
-    plt.ylabel("Mean exact group match rate")
-    plt.title("Whole-group coherence at baseline ambiguity")
+    plt.ylabel("Mean true household recovery")
+    plt.title("True household recovery at baseline ambiguity")
     plt.xticks(rotation=12)
     plt.tight_layout()
     plt.savefig(out_dir / "fig_baseline_group_exact.pdf")
     plt.close()
 
     plt.figure(figsize=(6.4, 4.2))
-    plt.bar(s["method"], s["abs_bias_mean"])
-    plt.ylabel("Mean absolute bias")
-    plt.title("Bias in linked treatment-effect estimate at baseline ambiguity")
+    plt.bar(s["method"], s["abs_gap_error_mean"])
+    plt.ylabel("Mean absolute gap error")
+    plt.title("Linked treatment gap error at baseline ambiguity")
     plt.xticks(rotation=12)
     plt.tight_layout()
     plt.savefig(out_dir / "fig_baseline_bias.pdf")
@@ -312,6 +314,7 @@ def plot_baseline(summary: pd.DataFrame, out_dir: Path) -> None:
 
 def plot_sweep(sweep_summary: pd.DataFrame, out_dir: Path) -> None:
     order = ["Greedy person-level", "Hungarian person-level", "Set-aware group-first"]
+    styles = [("o", "-"), ("s", "--"), ("^", ":")]
     sweep_summary = sweep_summary.copy()
     sweep_summary["method"] = pd.Categorical(
         sweep_summary["method"], categories=order, ordered=True
@@ -319,24 +322,44 @@ def plot_sweep(sweep_summary: pd.DataFrame, out_dir: Path) -> None:
     sweep_summary = sweep_summary.sort_values(["method", "ambiguity"])
 
     plt.figure(figsize=(6.4, 4.2))
-    for method in order:
+    for method, (marker, linestyle) in zip(order, styles, strict=True):
         sub = sweep_summary.loc[sweep_summary["method"] == method]
-        plt.plot(sub["ambiguity"], sub["group_exact_mean"], marker="o", label=method)
+        x = sub["ambiguity"].to_numpy()
+        mean = sub["group_exact_mean"].to_numpy()
+        se = sub["group_exact_se"].to_numpy()
+        line = plt.plot(x, mean, marker=marker, linestyle=linestyle, label=method)[0]
+        plt.fill_between(
+            x,
+            np.clip(mean - 1.96 * se, 0, 1),
+            np.clip(mean + 1.96 * se, 0, 1),
+            color=line.get_color(),
+            alpha=0.15,
+        )
     plt.xlabel("Ambiguity level")
-    plt.ylabel("Mean exact group match rate")
-    plt.title("Set-aware linkage preserves group coherence as ambiguity rises")
+    plt.ylabel("Mean true household recovery")
+    plt.title("True household recovery across ambiguity levels")
     plt.legend(frameon=False)
     plt.tight_layout()
     plt.savefig(out_dir / "fig_sweep_group_exact.pdf")
     plt.close()
 
     plt.figure(figsize=(6.4, 4.2))
-    for method in order:
+    for method, (marker, linestyle) in zip(order, styles, strict=True):
         sub = sweep_summary.loc[sweep_summary["method"] == method]
-        plt.plot(sub["ambiguity"], sub["abs_bias_mean"], marker="o", label=method)
+        x = sub["ambiguity"].to_numpy()
+        mean = sub["abs_gap_error_mean"].to_numpy()
+        se = sub["abs_gap_error_se"].to_numpy()
+        line = plt.plot(x, mean, marker=marker, linestyle=linestyle, label=method)[0]
+        plt.fill_between(
+            x,
+            np.maximum(mean - 1.96 * se, 0),
+            mean + 1.96 * se,
+            color=line.get_color(),
+            alpha=0.15,
+        )
     plt.xlabel("Ambiguity level")
-    plt.ylabel("Mean absolute bias")
-    plt.title("Set-aware linkage lowers downstream bias across ambiguity levels")
+    plt.ylabel("Mean absolute gap error")
+    plt.title("Linked treatment gap error across ambiguity levels")
     plt.legend(frameon=False)
     plt.tight_layout()
     plt.savefig(out_dir / "fig_sweep_bias.pdf")

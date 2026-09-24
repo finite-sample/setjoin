@@ -1,4 +1,4 @@
-person_accuracy,group_accuracy_personlevel,group_exact_match_rate,abs_bias_treatment_gap,method,ambiguity,seed
+person_accuracy,group_accuracy_personlevel,group_exact_match_rate,absolute_gap_error,method,ambiguity,seed
 0.5642857142857143,0.6428571428571429,0.44285714285714284,2.389598832983232,Greedy person-level,0.5,500000
 0.6642857142857143,0.7357142857142858,0.5571428571428572,1.8440428526711372,Hungarian person-level,0.5,500000
 0.9142857142857143,0.9714285714285714,0.9714285714285714,0.0,Set-aware group-first,0.5,500000

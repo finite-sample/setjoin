@@ -25,7 +25,7 @@
 
 \input{tables/baseline_macros.tex}
 
-\title{\textbf{Joins as Selection Problems:\\Objective Misspecification in Record Linkage and Table Integration}}
+\title{\textbf{Household-Constrained Assignment: A Simulation Note}}
 \author{}
 \date{\today}
 
@@ -33,7 +33,7 @@
 \maketitle
 
 \begin{abstract}
-Standard record linkage scores candidate pairs and then classifies or assigns them. That formulation is exact only when the quality of the linked output is separable over its selected links. Many empirical joins are evaluated differently. The analyst cares about a property of the linked table as a whole: hierarchical nesting, distributional calibration, referential integrity, temporal continuity, or consistency across multiple joins. We formalize linkage as a selection problem over feasible linked tables. Additive pairwise scoring then becomes a surrogate objective; the analyst's actual problem typically adds a non-separable table-level criterion or imposes table-level constraints. This perspective connects naturally to the finite selection model (FSM): when the criterion is global, candidate links should be evaluated by their incremental contribution to the evolving table, not in isolation. We show that every penalized optimum is optimal for the constrained problem at the coherence level it attains, that one-to-one disagreements with the truth are combinatorially coupled through permutation cycles, and that downstream bias is bounded by distortion in the analysis labels induced by the join. A household example illustrates the framework. In the project simulation, the structured optimizer raises person-level accuracy from \HungarianPersonAcc{} under Hungarian assignment to \SetAwarePersonAcc{}, raises exact household recovery from \HungarianHHExact{} to \SetAwareHHExact{}, and lowers absolute bias from \HungarianBias{} to \SetAwareBias{}.
+We compare person-level and household-constrained assignment in a synthetic setting. The structured optimizer raises person-level accuracy from \HungarianPersonAcc{} under Hungarian assignment to \SetAwarePersonAcc{}, raises exact household recovery from \HungarianHHExact{} to \SetAwareHHExact{}, and lowers mean absolute linked-gap error from \HungarianGapError{} to \SetAwareGapError{}. These descriptive results depend on the simulated group structure and scoring model.
 \end{abstract}
 
 \section{Introduction}
@@ -200,7 +200,7 @@ Assume there is a metric $\rho$ on the label space and a constant $L<\infty$ suc
 \label{eq:lipschitz-q}
 \end{equation}
 
-\begin{proposition}[Bias is bounded by distortion in analysis labels]
+\begin{proposition}[Linked-estimand error is bounded by label distortion]
 \label{prop:bias-bound}
 Under \eqref{eq:target-general}--\eqref{eq:lipschitz-q},
 \begin{equation}
@@ -233,51 +233,27 @@ which gives \eqref{eq:bias-bound}. Taking expectations yields \eqref{eq:bias-bou
 
 A structured or FSM-style rule can lower the upper bound on downstream bias when it reduces distortion in the analysis labels that enter the estimand. It need not help when the added structure is irrelevant to the estimand, unavailable, or misspecified.
 
-In the simplest case, if a wrong join only changes a binary analysis label and outcomes are linear in that label, bias is controlled directly by how often the join changes the label.
+For a binary analysis label, the direction and size of the error depend on which outcomes cross the label boundary.
 
-\begin{corollary}[Binary label misclassification and attenuation]
-\label{cor:attenuation}
-Suppose $U_i^\star=Z_i\in\{0,1\}$ is a balanced binary label, $\widetilde U_i(J)=W_i(J)$, and outcomes satisfy
+\begin{proposition}[Outcome-weighted boundary crossings]
+\label{prop:boundary}
+Suppose $W$ is a permutation of the binary labels $Z$, with $n_1$ treated and $n_0$ control labels. For the difference in mean outcomes defined by either label vector,
 \begin{equation}
-Y_i=\alpha+\tau Z_i+u_i,
-\qquad \mathbb{E}[u_i\mid Z_i]=0.
-\label{eq:outcome-model-general}
+\hat\tau(W)-\hat\tau(Z)
+=\left(\frac{1}{n_1}+\frac{1}{n_0}\right)
+\sum_i Y_i(W_i-Z_i).
+\label{eq:boundary-identity}
 \end{equation}
-Assume $W_i(J_R)=Z_i\oplus E_i$ under linkage rule $R$, where $E_i\sim\mathrm{Bernoulli}(\varepsilon_R)$ is independent of $(Z_i,u_i)$ and $\oplus$ denotes exclusive OR. Then the linked difference-in-means estimator based on $W_i(J_R)$ satisfies
-\begin{equation}
-\mathbb{E}[\hat\tau_R]=(1-2\varepsilon_R)\tau.
-\label{eq:attenuation-general}
-\end{equation}
-Hence any linkage rule with a smaller induced misclassification rate $\varepsilon_R$ is less biased in absolute value.
-\end{corollary}
+In particular, swaps within a label group do not change this estimator.
+\end{proposition}
 
 \begin{proof}
-Under balance and symmetric misclassification,
-\[
-\Pr(Z_i=1\mid W_i=1)=1-\varepsilon_R,
-\qquad
-\Pr(Z_i=1\mid W_i=0)=\varepsilon_R.
-\]
-Therefore
-\[
-\mathbb{E}[Y_i\mid W_i=1]-\mathbb{E}[Y_i\mid W_i=0]
-=
-\tau\bigl((1-\varepsilon_R)-\varepsilon_R\bigr)
-=
-(1-2\varepsilon_R)\tau.
-\]
+The permutation preserves $n_1$ and $n_0$. Write each difference in means as
+$\sum_i Y_i W_i/n_1-\sum_i Y_i(1-W_i)/n_0$ and subtract the corresponding expression with $Z_i$.
 \end{proof}
 
 \begin{remark}
-The clean attenuation in Corollary~\ref{cor:attenuation} relies on three features: a balanced binary label, a linear outcome model, and symmetric misclassification. When the analysis label imported through linkage is a continuous covariate $X$ rather than a binary indicator, the situation is qualitatively different. In the simple scalar-covariate case, if the analyst regresses $Y$ on a mismeasured $\tilde X = X^* + u$ and the composite disturbance is mean-independent of $(X^*,u)$, then
-\[
-\operatorname{plim}\hat\beta
-=
-\beta \cdot
-\frac{\operatorname{Var}(X^*) + \operatorname{Cov}(X^*,u)}
-{\operatorname{Var}(X^*) + \operatorname{Var}(u) + 2\operatorname{Cov}(X^*,u)}.
-\]
-Classical attenuation requires $\operatorname{Cov}(X^*,u)=0$. Under structured linkage error, where mismatches are confined to similar candidates rather than exchangeable across the population, $\operatorname{Cov}(X^*,u)$ is generically nonzero, and the bias can amplify rather than attenuate \citep{sood2025fuzzyjoins}. Attenuation is a property of the balanced binary setup, not a general consequence of linkage error.
+Equation~\eqref{eq:boundary-identity} is an accounting identity, not an attenuation theorem. If $Y_i=\alpha+\tau Z_i+u_i$ and $e$ treated units cross to control (hence $e$ control units cross to treatment), the difference is $-(1/n_1+1/n_0)e\tau$ plus the same expression weighted by $u_i$. A conditional attenuation formula requires the latter term to have mean zero conditional on the linkage errors. That condition need not hold when linkage uses covariates that also predict outcomes, as in the simulation below. The corresponding finite-sample claim under independent Bernoulli label flips is also generally false because the random group denominators change and some draws have an empty group.
 \end{remark}
 
 \section{Sources of non-separability in table linkage}
@@ -377,7 +353,7 @@ a_4\mapsto b_2,
 \]
 with score $3.90$, over the household-preserving identity assignment with score $3.74$. So this is a genuine case in which the additive optimizer sacrifices the analyst's objective in order to gain pairwise score.
 
-Now suppose the downstream analysis imports a household treatment label from file $B$. If household $g_1$ is treated and $g_2$ is control, the crossover join swaps one treated and one control label. In the balanced symmetric setting of Corollary~\ref{cor:attenuation}, that induced misclassification attenuates the linked treatment effect. The point of the example is not that all linkage error attenuates. It is that small pairwise gains can be inferentially costly once the analysis label lives at household level.
+Now suppose the downstream analysis imports a household treatment label from file $B$. If household $g_1$ is treated and $g_2$ is control, the crossover join swaps one treated and one control label. Proposition~\ref{prop:boundary} shows that its effect on the linked contrast depends on the outcomes of the units crossing that boundary. The pairwise score alone does not determine the direction.
 
 \subsection{Local ambiguity and household breakage}
 
@@ -452,7 +428,7 @@ The evaluation metrics follow the theory:
 \begin{enumerate}[leftmargin=1.5em]
     \item \textbf{Person accuracy}: the share of persons linked to their true counterpart.
     \item \textbf{Exact household recovery}: the share of file-$A$ households whose members are both linked to the correct file-$B$ household.
-    \item \textbf{Absolute bias}: the absolute error of the linked estimator
+    \item \textbf{Absolute linked-gap error}: the absolute error of the linked estimator
     \[
     \hat\tau(J)=\bar Y_{W(J)=1}-\bar Y_{W(J)=0},
     \]
@@ -473,27 +449,27 @@ Table~\ref{tab:baseline} reports the baseline comparison. Standard errors across
 \input{tables/tab_baseline_metrics.tex}
 \end{table}
 
-The first comparison is algorithmic: Hungarian improves on greedy linkage because it solves the additive person-level objective exactly. The second comparison is substantive: relative to Hungarian, the structured optimizer improves person-level accuracy by \PersonGainVsHungarian{}, improves exact household recovery by \HHGainVsHungarian{}, and reduces absolute bias by \BiasReductionVsHungarian{} points.
+In this simulation, Hungarian improves on greedy linkage in person accuracy. Relative to Hungarian, the structured optimizer improves person-level accuracy by \PersonGainVsHungarian{} and exact household recovery by \HHGainVsHungarian{} on the 0--1 scale, and reduces mean absolute linked-gap error by \GapErrorReductionVsHungarian{} outcome units.
 
-Those gains line up with the theory. Proposition~\ref{prop:decompose-household} says that once households define the relevant feasible set, the right exact benchmark is a household-level assignment, not a person-level one. Proposition~\ref{prop:crossover-household} says that household recovery compounds person-level ambiguity multiplicatively. Corollary~\ref{cor:attenuation} says that, in the binary symmetric setup used here, reducing induced treatment-label misclassification lowers downstream bias. The simulation turns those statements into magnitudes.
+The group-constrained assignment implements Proposition~\ref{prop:decompose-household}. Proposition~\ref{prop:boundary} identifies which label errors affect the gap; it does not predict the sign or magnitude of the simulation's error. The simulation supplies those magnitudes for its specified data-generating process only.
 
-Figure~\ref{fig:hh-sweep} plots exact household recovery across the ambiguity sweep. Figure~\ref{fig:bias-sweep} plots absolute downstream bias.
+Figure~\ref{fig:hh-sweep} plots exact household recovery across the ambiguity sweep. Figure~\ref{fig:bias-sweep} plots mean absolute linked-gap error.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.82\textwidth]{figures/fig_sweep_household_exact.pdf}
-\caption{Exact household recovery as a function of ambiguity. All methods degrade as ambiguity rises, but the structured optimizer retains a large advantage throughout.}
+\includegraphics[width=0.82\textwidth]{figures/fig_sweep_group_exact.pdf}
+\caption{Exact household recovery across simulated ambiguity levels. Points show means over 60 replications per level; bands show means $\pm 1.96$ Monte Carlo standard errors.}
 \label{fig:hh-sweep}
 \end{figure}
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.82\textwidth]{figures/fig_sweep_bias.pdf}
-\caption{Absolute downstream bias across the ambiguity sweep. The structured optimizer dominates throughout, with the advantage widening as the join becomes harder.}
+\caption{Mean absolute linked-gap error across simulated ambiguity levels. Points show means over 60 replications per level; bands show means $\pm 1.96$ Monte Carlo standard errors.}
 \label{fig:bias-sweep}
 \end{figure}
 
-At low ambiguity, the pairwise surrogate is often close to the structured problem, so the gap is moderate. As ambiguity rises, cross-household temptations become more common and exact household recovery deteriorates much faster for the person-level procedures. The structured optimizer also maintains a clear advantage in downstream bias throughout the sweep.
+In this synthetic sweep, exact household recovery deteriorates faster for the person-level procedures. The structured optimizer has lower mean absolute linked-gap error at the levels tested. These are conditional simulation findings, not evidence of a general advantage on observed panels.
 
 These differences are not generated by richer pairwise features or by tuning. All three procedures use the same underlying record-level score matrix. What changes is whether the optimizer is permitted to spend pairwise score by damaging a property of the linked table that the downstream analysis actually uses.
 
@@ -503,7 +479,7 @@ Many joins are better understood as selection problems over feasible linked tabl
 
 Three practical implications follow.
 
-First, linkage should be designed against the downstream estimand, not against pairwise accuracy alone. Pairwise precision and recall can be high while the analysis labels in the linked table are badly distorted. And the same distortion can be catastrophic for one estimand and irrelevant for another, because the cost of a matching error depends on whether it crosses boundaries that matter for the analyst's specific target. Proposition~\ref{prop:bias-bound} and Corollary~\ref{cor:attenuation} make that distinction explicit.
+First, linkage decisions should be evaluated against the downstream estimand. Pairwise accuracy can conceal errors in analysis labels. Proposition~\ref{prop:bias-bound} gives a distortion bound, while Proposition~\ref{prop:boundary} gives exact accounting of boundary-crossing effects on a fixed-sample binary contrast.
 
 Second, higher-order constraints are information, not inconvenience. If the output table should preserve a hierarchy, satisfy calibration totals, or remain consistent across composed joins, that information can and should be used by the optimizer. Ignoring it is analogous to ignoring covariates in experimental design or auxiliary variables in survey sampling.
 
@@ -515,9 +491,7 @@ That said, structure is not automatically beneficial. It helps when the added in
 
 The analysis above assumes the analyst controls the optimizer. In many settings this is not the case. Data products ship a single canonical linkage, and the analyst works with it as given, without access to the raw files, the matching algorithm, or the computational resources to re-optimize.
 
-The essential artifact for downstream correction is the candidate-match graph: the full set of (source, candidate target) pairs with pairwise evidence scores. With this graph, the analyst can propagate matching uncertainty into interval estimates via multiple imputation over candidate assignments, or, in simple settings and with a validation sample of verified links, can attempt regression calibration \citep{sood2025fuzzyjoins,carroll2006}. Without the candidate graph, those routes are sharply limited. And because different estimands face different error costs (Section~\ref{sec:taxonomy}), different analysts may need to resolve the same candidate graph differently. A treatment-assignment analyst should resolve conservatively; an outcome-attachment analyst can tolerate within-group ambiguity. Shipping a single canonical linkage forecloses this choice.
-
-A further complication arises when the data product's covariates were themselves computed from an upstream fuzzy join. The upstream contamination is invisible to the downstream analyst and is estimand-specific: two analysts using the same data product with different covariates can face very different biases from the same upstream matching errors, because the contamination at each geographic unit depends on how much the covariate varies within confusable clusters \citep{sood2025fuzzyjoins}. Summary match-quality statistics (overall match rate, pairwise accuracy) do not distinguish between these cases. The practical implication is that data producers should ship the candidate-match graph alongside the canonical linkage, and should document which published covariates were computed from fuzzy-matched records.
+Retaining candidate links and scores can support sensitivity analysis alongside a canonical linkage. This draft does not establish that they are sufficient for valid uncertainty intervals or correction without a model for dependence across links and the downstream estimand.
 
 \section{Reproducibility}
 

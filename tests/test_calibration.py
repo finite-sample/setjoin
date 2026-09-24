@@ -107,6 +107,22 @@ class TestRakeWeights:
         with pytest.raises(ValueError, match="not found"):
             rake_weights(matches, df, spec)
 
+    def test_unavailable_positive_category_raises(self) -> None:
+        df = pd.DataFrame({"region": ["north", "north"]})
+        spec = CalibrationSpec(margins={"region": {"north": 0.5, "south": 0.5}})
+        with pytest.raises(ValueError, match="no matched source records"):
+            rake_weights([(0, 0), (1, 1)], df, spec)
+
+    def test_incompatible_joint_margins_raise(self) -> None:
+        df = pd.DataFrame({"x": [0, 1], "y": [0, 1]})
+        spec = CalibrationSpec(
+            margins={"x": {0: 0.9, 1: 0.1}, "y": {0: 0.1, 1: 0.9}},
+            max_iterations=20,
+            tolerance=0.01,
+        )
+        with pytest.raises(ValueError, match="did not reach"):
+            rake_weights([(0, 0), (1, 1)], df, spec)
+
 
 class TestCalibratedMatch:
     def test_basic_calibration(self) -> None:

@@ -26,14 +26,14 @@ Suppose A and C are in target household X, while B and D are in target household
 
 ## Why It Matters
 
-In simulations with realistic ambiguity:
+In one synthetic experiment with 70 two-person households and 150 replications at the baseline ambiguity setting:
 
-| Method | Group Coherence | Person Accuracy | Downstream Bias |
+| Method | True household recovery | Person accuracy | Mean absolute linked-gap error |
 |--------|-----------------|-----------------|-----------------|
-| Hungarian (person-level) | 12% | 32% | 3.7 |
-| **Structure-aware** | **52%** | **48%** | **2.3** |
+| Hungarian (person-level) | 11.7% | 29.6% | 4.064 |
+| **Structure-aware** | **57.7%** | **54.0%** | **2.575** |
 
-Structure-aware matching achieves **4x better group coherence** while also improving person-level accuracy. When groups are preserved, downstream analyses (treatment effects, household income, etc.) have less bias.
+The last column is the mean absolute difference between the linked and true treatment-group gaps, in the simulation's outcome units. It is not a bias estimate or evidence of performance on observed data.
 
 ## When to Use
 
@@ -57,7 +57,7 @@ Structure-aware matching uses **two-level assignment**:
 
 3. **Extract matches**: From matched groups, use the within-group assignments.
 
-This guarantees all records in a source group map to a single target group while maximizing total match quality.
+This maximizes the pairwise score among the group assignments the algorithm permits. If group counts or sizes differ, some records may remain unmatched; their positions are reported in `result.metadata["unmatched_source"]` and `result.metadata["unmatched_target"]`. A complete group-preserving assignment requires compatible group counts and sizes. The method does not estimate match probabilities or decide whether a group constraint is warranted.
 
 ## Installation
 
@@ -218,6 +218,8 @@ print(result.weights)  # Calibration weights for each match
 print(result.calibration_achieved)  # Achieved proportions
 ```
 
+`calibrated_match` assigns links first and then rakes weights for the matched source records. It does not use calibration targets when selecting links. If a requested positive-weight category is absent among matched records, calibration raises an error.
+
 ## API Overview
 
 | Function | Purpose |
@@ -225,9 +227,9 @@ print(result.calibration_achieved)  # Achieved proportions
 | `match()` | Main entry point - routes to greedy, hungarian, or structure_aware |
 | `hungarian_match()` | Optimal 1-to-1 assignment maximizing total score |
 | `greedy_match()` | Fast heuristic picking highest scores first |
-| `structure_aware_match()` | Optimal assignment preserving group structure |
+| `structure_aware_match()` | Group-constrained score assignment; may return partial matches |
 | `soft_match()` | Probabilistic weights via entropy-regularized transport |
-| `calibrated_match()` | Match + rake weights to hit target marginals |
+| `calibrated_match()` | Match, then rake matched-record weights toward target marginals |
 | `Scorer` | Build score matrices from DataFrames with configurable comparators |
 | `HierarchySpec` | Define group structure for structure-aware matching |
 | `CalibrationSpec` | Define target marginal distributions |

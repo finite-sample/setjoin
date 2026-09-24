@@ -1,5 +1,6 @@
 """Diagnostic metrics and report generation for match evaluation."""
 
+from collections.abc import Hashable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -22,10 +23,10 @@ class MatchReport:
     ground_truth: list[tuple[int, int]] | None = None
     """Optional ground truth matches for accuracy computation."""
 
-    source_groups: dict[int, list[int]] | None = None
+    source_groups: dict[Hashable, list[int]] | None = None
     """Optional source group structure for coherence metrics."""
 
-    target_groups: dict[int, list[int]] | None = None
+    target_groups: dict[Hashable, list[int]] | None = None
     """Optional target group structure for coherence metrics."""
 
     source_df: pd.DataFrame | None = None
@@ -34,7 +35,7 @@ class MatchReport:
     target_df: pd.DataFrame | None = None
     """Optional target DataFrame for detailed analysis."""
 
-    _cache: dict[str, dict[int, int]] = field(default_factory=dict, repr=False)
+    _cache: dict[str, dict[int, Hashable]] = field(default_factory=dict, repr=False)
 
     @property
     def n_matches(self) -> int:
@@ -43,7 +44,7 @@ class MatchReport:
 
     @property
     def record_accuracy(self) -> float | None:
-        """Fraction of matches that are correct (if ground truth provided)."""
+        """Fraction of ground-truth links recovered (record recall)."""
         if self.ground_truth is None:
             return None
 
@@ -84,7 +85,10 @@ class MatchReport:
 
     @property
     def group_exact_match_rate(self) -> float | None:
-        """Fraction of source groups whose members all land in one target group."""
+        """Fraction of complete source groups mapped entirely into one target group.
+
+        This measures group coherence, not whether the target group is the true one.
+        """
         if self.source_groups is None or self.target_groups is None:
             return None
 
@@ -93,11 +97,14 @@ class MatchReport:
 
         exact_matches = 0
         for src_indices in self.source_groups.values():
-            tgt_groups_matched: set[int | None] = set()
+            if not src_indices or any(
+                idx not in src_idx_to_tgt_idx for idx in src_indices
+            ):
+                continue
+            tgt_groups_matched: set[Hashable | None] = set()
             for src_idx in src_indices:
-                tgt_idx = src_idx_to_tgt_idx.get(src_idx)
-                if tgt_idx is not None:
-                    tgt_groups_matched.add(tgt_idx_to_group.get(tgt_idx))
+                tgt_idx = src_idx_to_tgt_idx[src_idx]
+                tgt_groups_matched.add(tgt_idx_to_group.get(tgt_idx))
             if len(tgt_groups_matched) == 1 and None not in tgt_groups_matched:
                 exact_matches += 1
 
@@ -112,6 +119,8 @@ class MatchReport:
         from setjoin.matchers import hungarian_match
 
         hungarian_result = hungarian_match(self.scores)
+        if len(hungarian_result.matches) != len(self.result.matches):
+            return None
         return hungarian_result.total_score - self.result.total_score
 
     def match_confidence(self) -> pd.DataFrame:
@@ -121,16 +130,16 @@ class MatchReport:
         - source_idx, target_idx: the match
         - score: score of this match
         - rank: rank of this match among alternatives for source
-        - margin: difference between this score and second-best alternative
+        - margin: difference between this score and best other target
         """
         rows = []
         for src_idx, tgt_idx in self.result.matches:
             score = self.scores[src_idx, tgt_idx]
             src_scores = self.scores[src_idx, :]
-            sorted_scores = np.sort(src_scores)[::-1]
-            rank = int(np.searchsorted(-sorted_scores, -score)) + 1
-            if len(sorted_scores) > 1:
-                margin = float(score - sorted_scores[1])
+            rank = int(np.count_nonzero(src_scores > score)) + 1
+            if len(src_scores) > 1:
+                alternatives = np.delete(src_scores, tgt_idx)
+                margin = float(score - alternatives.max())
             else:
                 margin = float("inf")
             rows.append(
@@ -159,20 +168,24 @@ class MatchReport:
         if self.result.group_assignments is None:
             return None
 
+        from setjoin.hierarchy import HierarchySpec, compute_group_score_matrix
+
+        hierarchy = HierarchySpec(self.source_groups, self.target_groups)
+        group_scores, _ = compute_group_score_matrix(hierarchy, self.scores)
+        source_positions = {gid: i for i, gid in enumerate(hierarchy.source_group_ids)}
+        target_positions = {gid: i for i, gid in enumerate(hierarchy.target_group_ids)}
         rows = []
         for src_gid, tgt_gid in self.result.group_assignments.items():
-            src_indices = self.source_groups[src_gid]
-            tgt_indices = self.target_groups[tgt_gid]
-
-            within_score = float(self.scores[np.ix_(src_indices, tgt_indices)].sum())
+            source_pos = source_positions[src_gid]
+            target_pos = target_positions[tgt_gid]
+            within_score = float(group_scores[source_pos, target_pos])
 
             best_alt_score = float("-inf")
-            for alt_tgt_gid, alt_tgt_indices in self.target_groups.items():
+            for alt_tgt_gid in self.target_groups:
                 if alt_tgt_gid == tgt_gid:
                     continue
-                alt_score = float(
-                    self.scores[np.ix_(src_indices, alt_tgt_indices)].sum()
-                )
+                alt_pos = target_positions[alt_tgt_gid]
+                alt_score = float(group_scores[source_pos, alt_pos])
                 best_alt_score = max(best_alt_score, alt_score)
 
             if best_alt_score != float("-inf"):
@@ -312,7 +325,7 @@ class MatchReport:
             "score_sacrifice": self.score_sacrifice,
         }
 
-    def _source_to_true_target_group(self) -> dict[int, int] | None:
+    def _source_to_true_target_group(self) -> dict[int, Hashable] | None:
         """Map source index to true target group."""
         if self.ground_truth is None or self.target_groups is None:
             return None
@@ -320,19 +333,19 @@ class MatchReport:
         tgt_idx_to_group = self._target_idx_to_group()
         truth_dict = dict(self.ground_truth)
 
-        result: dict[int, int] = {}
+        result: dict[int, Hashable] = {}
         for src_idx, tgt_idx in truth_dict.items():
             tgt_group = tgt_idx_to_group.get(tgt_idx)
             if tgt_group is not None:
                 result[src_idx] = tgt_group
         return result
 
-    def _target_idx_to_group(self) -> dict[int, int]:
+    def _target_idx_to_group(self) -> dict[int, Hashable]:
         """Map target index to target group."""
         if "_target_idx_to_group" in self._cache:
             return self._cache["_target_idx_to_group"]
 
-        result: dict[int, int] = {}
+        result: dict[int, Hashable] = {}
         if self.target_groups:
             for gid, indices in self.target_groups.items():
                 for idx in indices:
@@ -377,14 +390,14 @@ def evaluate_matches(
         group_correct = 0
         src_idx_to_tgt_idx = dict(matches)
 
-        source_groups: dict[int, list[int]] = {}
+        source_groups: dict[Hashable, list[int]] = {}
         for i in range(len(source)):
-            gid = int(source.iloc[i][source_group_col])
+            gid = source.iloc[i][source_group_col]
             source_groups.setdefault(gid, []).append(i)
 
-        target_groups: dict[int, list[int]] = {}
+        target_groups: dict[Hashable, list[int]] = {}
         for i in range(len(target)):
-            gid = int(target.iloc[i][target_group_col])
+            gid = target.iloc[i][target_group_col]
             target_groups.setdefault(gid, []).append(i)
 
         tgt_idx_to_group = {
@@ -392,11 +405,14 @@ def evaluate_matches(
         }
 
         for src_indices in source_groups.values():
-            matched_groups: set[int | None] = set()
+            if not src_indices or any(
+                idx not in src_idx_to_tgt_idx for idx in src_indices
+            ):
+                continue
+            matched_groups: set[Hashable | None] = set()
             for src_idx in src_indices:
-                tgt_idx_result = src_idx_to_tgt_idx.get(src_idx)
-                if tgt_idx_result is not None:
-                    matched_groups.add(tgt_idx_to_group.get(tgt_idx_result))
+                tgt_idx_result = src_idx_to_tgt_idx[src_idx]
+                matched_groups.add(tgt_idx_to_group.get(tgt_idx_result))
             if len(matched_groups) == 1 and None not in matched_groups:
                 group_correct += 1
 

@@ -1,14 +1,16 @@
 """Hierarchy specification and decomposition for structure-aware matching."""
 
-from collections.abc import Sequence
+from collections.abc import Hashable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, SupportsInt, cast
+from typing import Any
 
 import numpy as np
 import pandas as pd
 from numpy.typing import NDArray
 
 from setjoin.types import GroupSpec
+
+type GroupMatchMap = dict[tuple[Hashable, Hashable], list[tuple[int, int]]]
 
 
 @dataclass
@@ -19,10 +21,10 @@ class HierarchySpec:
     students within schools, items within orders) for structure-preserving matching.
     """
 
-    source_groups: dict[int, Sequence[int]]
+    source_groups: Mapping[Hashable, Sequence[int]]
     """Mapping from source group ID to record indices."""
 
-    target_groups: dict[int, Sequence[int]]
+    target_groups: Mapping[Hashable, Sequence[int]]
     """Mapping from target group ID to record indices."""
 
     @classmethod
@@ -44,13 +46,13 @@ class HierarchySpec:
         Returns:
             HierarchySpec: Group mappings
         """
-        source_groups: dict[int, Sequence[int]] = {}
-        for group_id, group_df in source.groupby(source_group_col):
-            source_groups[int(cast("SupportsInt", group_id))] = list(group_df.index)
+        source_groups: dict[Hashable, Sequence[int]] = {}
+        for group_id, positions in source.groupby(source_group_col).indices.items():
+            source_groups[group_id] = list(positions)
 
-        target_groups: dict[int, Sequence[int]] = {}
-        for group_id, group_df in target.groupby(target_group_col):
-            target_groups[int(cast("SupportsInt", group_id))] = list(group_df.index)
+        target_groups: dict[Hashable, Sequence[int]] = {}
+        for group_id, positions in target.groupby(target_group_col).indices.items():
+            target_groups[group_id] = list(positions)
 
         return cls(source_groups=source_groups, target_groups=target_groups)
 
@@ -69,13 +71,13 @@ class HierarchySpec:
         Returns:
             HierarchySpec: Group mappings
         """
-        source_groups: dict[int, Sequence[int]] = {}
-        for group_id, group_df in source_groupby:
-            source_groups[int(group_id)] = list(group_df.index)
+        source_groups: dict[Hashable, Sequence[int]] = {}
+        for group_id, positions in source_groupby.indices.items():
+            source_groups[group_id] = list(positions)
 
-        target_groups: dict[int, Sequence[int]] = {}
-        for group_id, group_df in target_groupby:
-            target_groups[int(group_id)] = list(group_df.index)
+        target_groups: dict[Hashable, Sequence[int]] = {}
+        for group_id, positions in target_groupby.indices.items():
+            target_groups[group_id] = list(positions)
 
         return cls(source_groups=source_groups, target_groups=target_groups)
 
@@ -90,28 +92,28 @@ class HierarchySpec:
         return len(self.target_groups)
 
     @property
-    def source_group_ids(self) -> list[int]:
+    def source_group_ids(self) -> list[Hashable]:
         """List of source group IDs."""
         return list(self.source_groups.keys())
 
     @property
-    def target_group_ids(self) -> list[int]:
+    def target_group_ids(self) -> list[Hashable]:
         """List of target group IDs."""
         return list(self.target_groups.keys())
 
-    def get_source_group(self, group_id: int) -> GroupSpec:
+    def get_source_group(self, group_id: Hashable) -> GroupSpec:
         """Get specification for a source group."""
         return GroupSpec(group_id=group_id, indices=self.source_groups[group_id])
 
-    def get_target_group(self, group_id: int) -> GroupSpec:
+    def get_target_group(self, group_id: Hashable) -> GroupSpec:
         """Get specification for a target group."""
         return GroupSpec(group_id=group_id, indices=self.target_groups[group_id])
 
-    def source_group_sizes(self) -> dict[int, int]:
+    def source_group_sizes(self) -> dict[Hashable, int]:
         """Get sizes of all source groups."""
         return {gid: len(indices) for gid, indices in self.source_groups.items()}
 
-    def target_group_sizes(self) -> dict[int, int]:
+    def target_group_sizes(self) -> dict[Hashable, int]:
         """Get sizes of all target groups."""
         return {gid: len(indices) for gid, indices in self.target_groups.items()}
 
@@ -119,7 +121,7 @@ class HierarchySpec:
 def compute_group_score_matrix(
     hierarchy: HierarchySpec,
     record_scores: NDArray[np.float64],
-) -> tuple[NDArray[np.float64], dict[tuple[int, int], list[tuple[int, int]]]]:
+) -> tuple[NDArray[np.float64], GroupMatchMap]:
     """Compute score matrix at the group level with optimal within-group assignments.
 
     For each pair of (source_group, target_group), computes the optimal assignment
@@ -131,7 +133,7 @@ def compute_group_score_matrix(
             (shape: n_source_records x n_target_records)
 
     Returns:
-        tuple[NDArray[np.float64], dict[tuple[int, int], list[tuple[int, int]]]]:
+        tuple[NDArray[np.float64], GroupMatchMap]:
             Group score matrix and within-group match assignments
     """
     from scipy.optimize import linear_sum_assignment
@@ -140,7 +142,7 @@ def compute_group_score_matrix(
     target_ids = hierarchy.target_group_ids
 
     group_scores = np.zeros((len(source_ids), len(target_ids)), dtype=np.float64)
-    within_matches: dict[tuple[int, int], list[tuple[int, int]]] = {}
+    within_matches: GroupMatchMap = {}
 
     for si, src_id in enumerate(source_ids):
         src_indices = list(hierarchy.source_groups[src_id])
@@ -172,7 +174,7 @@ def compute_group_score_matrix(
 
 def decompose_by_size(
     hierarchy: HierarchySpec,
-) -> dict[tuple[int, int], tuple[list[int], list[int]]]:
+) -> dict[tuple[int, int], tuple[list[Hashable], list[Hashable]]]:
     """Decompose groups by size for efficient matching.
 
     Groups source and target groups by their sizes to enable size-aware matching
@@ -182,21 +184,21 @@ def decompose_by_size(
         hierarchy: HierarchySpec defining group structure
 
     Returns:
-        dict[tuple[int, int], tuple[list[int], list[int]]]:
+        dict[tuple[int, int], tuple[list[Hashable], list[Hashable]]]:
             Size pairs to group ID lists
     """
     source_sizes = hierarchy.source_group_sizes()
     target_sizes = hierarchy.target_group_sizes()
 
-    source_by_size: dict[int, list[int]] = {}
+    source_by_size: dict[int, list[Hashable]] = {}
     for gid, size in source_sizes.items():
         source_by_size.setdefault(size, []).append(gid)
 
-    target_by_size: dict[int, list[int]] = {}
+    target_by_size: dict[int, list[Hashable]] = {}
     for gid, size in target_sizes.items():
         target_by_size.setdefault(size, []).append(gid)
 
-    result: dict[tuple[int, int], tuple[list[int], list[int]]] = {}
+    result: dict[tuple[int, int], tuple[list[Hashable], list[Hashable]]] = {}
     for src_size, src_ids in source_by_size.items():
         for tgt_size, tgt_ids in target_by_size.items():
             result[(src_size, tgt_size)] = (src_ids, tgt_ids)

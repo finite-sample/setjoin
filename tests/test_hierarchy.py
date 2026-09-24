@@ -2,12 +2,14 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from setjoin.hierarchy import (
     HierarchySpec,
     compute_group_score_matrix,
     decompose_by_size,
 )
+from setjoin.matchers import structure_aware_match
 
 
 class TestHierarchySpec:
@@ -23,6 +25,35 @@ class TestHierarchySpec:
         assert hierarchy.n_target_groups == 2
         assert set(hierarchy.source_group_ids) == {0, 1}
         assert set(hierarchy.target_group_ids) == {0, 1}
+
+    def test_dataframe_uses_positions_and_preserves_string_ids(self) -> None:
+        source = pd.DataFrame({"group": ["alpha", "alpha", "beta"]}, index=[10, 11, 12])
+        target = pd.DataFrame({"group": ["x", "x", "y"]}, index=[20, 21, 22])
+        hierarchy = HierarchySpec.from_dataframe(source, target, "group", "group")
+
+        assert hierarchy.source_groups == {"alpha": [0, 1], "beta": [2]}
+        assert hierarchy.target_groups == {"x": [0, 1], "y": [2]}
+        result = structure_aware_match(np.eye(3), hierarchy)
+        assert result.matches == [(0, 0), (1, 1), (2, 2)]
+
+    def test_groupby_uses_positions(self) -> None:
+        source = pd.DataFrame({"group": ["a", "a"]}, index=[10, 11])
+        target = pd.DataFrame({"group": ["b", "b"]}, index=[20, 21])
+        hierarchy = HierarchySpec.from_groupby(
+            source.groupby("group"), target.groupby("group")
+        )
+        assert hierarchy.source_groups == {"a": [0, 1]}
+        assert hierarchy.target_groups == {"b": [0, 1]}
+
+    def test_missing_or_duplicate_group_positions_raise(self) -> None:
+        scores = np.eye(2)
+        for source_groups in ({"a": [0]}, {"a": [0, 0]}):
+            hierarchy = HierarchySpec(
+                source_groups=source_groups,
+                target_groups={"x": [0, 1]},
+            )
+            with pytest.raises(ValueError, match="partition"):
+                structure_aware_match(scores, hierarchy)
 
     def test_group_sizes(self) -> None:
         hierarchy = HierarchySpec(
