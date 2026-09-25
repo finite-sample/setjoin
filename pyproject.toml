@@ -74,8 +74,12 @@ convention = "google"
 "ms/**" = ["N803", "N806", "T201", "D103"]
 
 [tool.pytest.ini_options]
+minversion = "8.0"
 testpaths = ["tests"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --strict-config --strict-markers -ra"
+log_level = "WARNING"
+xfail_strict = true
+filterwarnings = ["default"]
 
 # Flat layout, so name the package explicitly: a bare `--cov` would otherwise
 # measure the whole working tree, ms/ scripts included.
