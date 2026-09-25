@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Extended simulation experiments for the setjoin package.
 
-These simulations demonstrate package capabilities and can expand the paper's
-empirical section with additional experiments.
+These simulations explore package behavior beyond the README benchmark.
 """
 
 from __future__ import annotations
@@ -326,7 +325,7 @@ def run_fine_ambiguity_sweep(
 
 
 def generate_diagnostic_showcase(output_dir: Path) -> None:
-    """Generate all diagnostic artifacts for paper appendix."""
+    """Generate diagnostic artifacts for the extended benchmark."""
     pop = simulate_variable_sizes(
         n_groups=30, size_distribution=[2, 3], ambiguity=1.5, seed=42
     )
@@ -369,7 +368,11 @@ def generate_diagnostic_showcase(output_dir: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", type=Path, default=Path("results/extended"))
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(__file__).resolve().parent / "results/extended",
+    )
     parser.add_argument(
         "--experiment",
         choices=[

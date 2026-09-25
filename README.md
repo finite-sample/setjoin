@@ -35,6 +35,8 @@ In one synthetic experiment with 70 two-person households and 150 replications a
 
 The last column is the mean absolute difference between the linked and true treatment-group gaps, in the simulation's outcome units. It is not a bias estimate or evidence of performance on observed data.
 
+Reproduce the numbers with `uv run python benchmarks/generate_results.py`. The seeds and raw runs are in [benchmarks/results](benchmarks/results); the experiment generates groups whose true membership is known on both sides.
+
 ## When to Use
 
 Use setjoin when your records have **known group structure** that must be preserved:

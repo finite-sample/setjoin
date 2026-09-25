@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
-"""Generate simulation results, tables, and figures for the FSM-style join paper.
-
-This script reproduces all tables/figures included in the paper.
-"""
+"""Generate the synthetic benchmark results reported in the README."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -216,160 +212,10 @@ def summarize(df: pd.DataFrame, by: list[str]) -> pd.DataFrame:
     ).reset_index()
 
 
-def format_table(baseline_summary: pd.DataFrame, table_path: Path) -> None:
-    order = ["Greedy person-level", "Hungarian person-level", "Set-aware group-first"]
-    baseline_summary = baseline_summary.copy()
-    baseline_summary["method"] = pd.Categorical(
-        baseline_summary["method"], categories=order, ordered=True
-    )
-    baseline_summary = baseline_summary.sort_values("method")
-
-    lines = []
-    lines.append(r"\begin{tabular}{lccc}")
-    lines.append(r"\toprule")
-    lines.append(
-        "Method & Person accuracy & Group exact match rate & "
-        r"Mean absolute gap error \\"
-    )
-    lines.append(r"\midrule")
-    for _, row in baseline_summary.iterrows():
-        lines.append(
-            f"{row['method']} & "
-            f"{row['person_accuracy_mean']:.3f} ({row['person_accuracy_se']:.3f}) & "
-            f"{row['group_exact_mean']:.3f} ({row['group_exact_se']:.3f}) & "
-            f"{row['abs_gap_error_mean']:.3f} ({row['abs_gap_error_se']:.3f}) \\\\"
-        )
-    lines.append(r"\bottomrule")
-    lines.append(r"\end{tabular}")
-    table_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def write_macros(baseline_summary: pd.DataFrame, macro_path: Path) -> None:
-    row_h = baseline_summary.loc[
-        baseline_summary["method"] == "Hungarian person-level"
-    ].iloc[0]
-    row_s = baseline_summary.loc[
-        baseline_summary["method"] == "Set-aware group-first"
-    ].iloc[0]
-    row_g = baseline_summary.loc[
-        baseline_summary["method"] == "Greedy person-level"
-    ].iloc[0]
-
-    def cmd(name: str, value: float) -> str:
-        return rf"\newcommand{{\{name}}}{{{value:.3f}}}"
-
-    lines = [
-        cmd("GreedyPersonAcc", row_g["person_accuracy_mean"]),
-        cmd("HungarianPersonAcc", row_h["person_accuracy_mean"]),
-        cmd("SetAwarePersonAcc", row_s["person_accuracy_mean"]),
-        cmd("GreedyGroupExact", row_g["group_exact_mean"]),
-        cmd("HungarianGroupExact", row_h["group_exact_mean"]),
-        cmd("SetAwareGroupExact", row_s["group_exact_mean"]),
-        cmd("HungarianHHExact", row_h["group_exact_mean"]),
-        cmd("SetAwareHHExact", row_s["group_exact_mean"]),
-        cmd("GreedyGapError", row_g["abs_gap_error_mean"]),
-        cmd("HungarianGapError", row_h["abs_gap_error_mean"]),
-        cmd("SetAwareGapError", row_s["abs_gap_error_mean"]),
-        cmd(
-            "PersonGainVsHungarian",
-            row_s["person_accuracy_mean"] - row_h["person_accuracy_mean"],
-        ),
-        cmd(
-            "GroupGainVsHungarian",
-            row_s["group_exact_mean"] - row_h["group_exact_mean"],
-        ),
-        cmd("HHGainVsHungarian", row_s["group_exact_mean"] - row_h["group_exact_mean"]),
-        cmd(
-            "GapErrorReductionVsHungarian",
-            row_h["abs_gap_error_mean"] - row_s["abs_gap_error_mean"],
-        ),
-    ]
-    macro_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def plot_baseline(summary: pd.DataFrame, out_dir: Path) -> None:
-    order = ["Greedy person-level", "Hungarian person-level", "Set-aware group-first"]
-    s = summary.copy()
-    s["method"] = pd.Categorical(s["method"], categories=order, ordered=True)
-    s = s.sort_values("method")
-
-    plt.figure(figsize=(6.4, 4.2))
-    plt.bar(s["method"], s["group_exact_mean"])
-    plt.ylabel("Mean true household recovery")
-    plt.title("True household recovery at baseline ambiguity")
-    plt.xticks(rotation=12)
-    plt.tight_layout()
-    plt.savefig(out_dir / "fig_baseline_group_exact.pdf")
-    plt.close()
-
-    plt.figure(figsize=(6.4, 4.2))
-    plt.bar(s["method"], s["abs_gap_error_mean"])
-    plt.ylabel("Mean absolute gap error")
-    plt.title("Linked treatment gap error at baseline ambiguity")
-    plt.xticks(rotation=12)
-    plt.tight_layout()
-    plt.savefig(out_dir / "fig_baseline_bias.pdf")
-    plt.close()
-
-
-def plot_sweep(sweep_summary: pd.DataFrame, out_dir: Path) -> None:
-    order = ["Greedy person-level", "Hungarian person-level", "Set-aware group-first"]
-    styles = [("o", "-"), ("s", "--"), ("^", ":")]
-    sweep_summary = sweep_summary.copy()
-    sweep_summary["method"] = pd.Categorical(
-        sweep_summary["method"], categories=order, ordered=True
-    )
-    sweep_summary = sweep_summary.sort_values(["method", "ambiguity"])
-
-    plt.figure(figsize=(6.4, 4.2))
-    for method, (marker, linestyle) in zip(order, styles, strict=True):
-        sub = sweep_summary.loc[sweep_summary["method"] == method]
-        x = sub["ambiguity"].to_numpy()
-        mean = sub["group_exact_mean"].to_numpy()
-        se = sub["group_exact_se"].to_numpy()
-        line = plt.plot(x, mean, marker=marker, linestyle=linestyle, label=method)[0]
-        plt.fill_between(
-            x,
-            np.clip(mean - 1.96 * se, 0, 1),
-            np.clip(mean + 1.96 * se, 0, 1),
-            color=line.get_color(),
-            alpha=0.15,
-        )
-    plt.xlabel("Ambiguity level")
-    plt.ylabel("Mean true household recovery")
-    plt.title("True household recovery across ambiguity levels")
-    plt.legend(frameon=False)
-    plt.tight_layout()
-    plt.savefig(out_dir / "fig_sweep_group_exact.pdf")
-    plt.close()
-
-    plt.figure(figsize=(6.4, 4.2))
-    for method, (marker, linestyle) in zip(order, styles, strict=True):
-        sub = sweep_summary.loc[sweep_summary["method"] == method]
-        x = sub["ambiguity"].to_numpy()
-        mean = sub["abs_gap_error_mean"].to_numpy()
-        se = sub["abs_gap_error_se"].to_numpy()
-        line = plt.plot(x, mean, marker=marker, linestyle=linestyle, label=method)[0]
-        plt.fill_between(
-            x,
-            np.maximum(mean - 1.96 * se, 0),
-            mean + 1.96 * se,
-            color=line.get_color(),
-            alpha=0.15,
-        )
-    plt.xlabel("Ambiguity level")
-    plt.ylabel("Mean absolute gap error")
-    plt.title("Linked treatment gap error across ambiguity levels")
-    plt.legend(frameon=False)
-    plt.tight_layout()
-    plt.savefig(out_dir / "fig_sweep_bias.pdf")
-    plt.close()
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--project-root", type=Path, default=Path(__file__).resolve().parent.parent
+        "--project-root", type=Path, default=Path(__file__).resolve().parent
     )
     parser.add_argument("--baseline-ambiguity", type=float, default=1.5)
     parser.add_argument("--baseline-runs", type=int, default=150)
@@ -383,11 +229,7 @@ def main() -> None:
     if not project_root.exists():
         raise ValueError(f"project_root does not exist: {project_root}")
     results_dir = project_root / "results"
-    tables_dir = project_root / "tables"
-    figures_dir = project_root / "figures"
     results_dir.mkdir(parents=True, exist_ok=True)
-    tables_dir.mkdir(parents=True, exist_ok=True)
-    figures_dir.mkdir(parents=True, exist_ok=True)
 
     baseline_runs = run_many([args.baseline_ambiguity], n_runs=args.baseline_runs)
     baseline_summary = summarize(baseline_runs, ["ambiguity", "method"])
@@ -399,18 +241,7 @@ def main() -> None:
     sweep_runs.to_csv(results_dir / "sweep_runs.csv", index=False)
     sweep_summary.to_csv(results_dir / "sweep_summary.csv", index=False)
 
-    baseline_table = baseline_summary.loc[
-        baseline_summary["ambiguity"] == args.baseline_ambiguity
-    ].copy()
-    format_table(baseline_table, tables_dir / "tab_baseline_metrics.tex")
-    write_macros(baseline_table, tables_dir / "baseline_macros.tex")
-
-    plot_baseline(baseline_table, figures_dir)
-    plot_sweep(sweep_summary, figures_dir)
-
     print("Wrote baseline and sweep results to:", results_dir)
-    print("Wrote LaTeX tables to:", tables_dir)
-    print("Wrote figures to:", figures_dir)
 
 
 if __name__ == "__main__":

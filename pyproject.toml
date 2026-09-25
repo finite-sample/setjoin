@@ -66,23 +66,21 @@ convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "D", "ARG", "SLF"]
-"ms/scripts/test_*.py" = ["S101", "D", "ARG", "SLF"]
+"benchmarks/test_*.py" = ["S101", "D", "ARG", "SLF"]
 "docs/**" = ["D"]
-# ms/ reproduces the paper, not the library. `A`/`B` are the two files being
-# linked in the paper's own notation, the scripts report progress on stdout,
-# and their helpers are internal to a single run rather than a public API.
-"ms/**" = ["N803", "N806", "T201", "D103"]
+# The benchmark names its two files A and B and reports progress on stdout.
+"benchmarks/**" = ["N803", "N806", "T201", "D103"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-testpaths = ["tests"]
+testpaths = ["tests", "benchmarks"]
 addopts = "-v --tb=short --strict-config --strict-markers -ra"
 log_level = "WARNING"
 xfail_strict = true
 filterwarnings = ["default"]
 
 # Flat layout, so name the package explicitly: a bare `--cov` would otherwise
-# measure the whole working tree, ms/ scripts included.
+# measure the whole working tree, benchmarks/ scripts included.
 [tool.coverage.run]
 source = ["setjoin"]
 

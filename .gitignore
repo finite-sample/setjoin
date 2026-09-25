@@ -45,24 +45,9 @@ htmlcov/
 # Documentation
 docs/_build/
 
-# LaTeX
-*.aux
-*.bbl
-*.blg
-*.fdb_latexmk
-*.fls
-*.log
-*.out
-*.synctex.gz
-*.toc
-
 # OS
 .DS_Store
 Thumbs.db
 
 # Docs preview
 _site/
-
-ms/main.bcf
-ms/main.run.xml
-ms/main.pdf
