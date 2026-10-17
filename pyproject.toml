@@ -118,3 +118,6 @@ dev = [
     "pydoclint>=0.5",
     "pandas-stubs>=2.0",
 ]
+
+[tool.codespell]
+builtin = "clear,rare,en-GB_to_en-US"
