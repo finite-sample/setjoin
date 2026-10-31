@@ -1,4 +1,4 @@
-# setjoin
+# setjoin: record linkage that keeps groups together
 
 [![PyPI version](https://img.shields.io/pypi/v/setjoin.svg)](https://pypi.org/project/setjoin/)
 [![Python versions](https://img.shields.io/pypi/pyversions/setjoin.svg)](https://pypi.org/project/setjoin/)
