@@ -124,10 +124,12 @@ def jaro_winkler(a: NDArray[np.object_], b: NDArray[np.object_]) -> NDArray[np.f
 ComparatorType = Callable[[NDArray[Any], NDArray[Any]], NDArray[np.float64]]
 
 COMPARATORS: dict[str, ComparatorType] = {
-    "exact": exact_match,
-    "abs_diff": abs_diff,
-    "levenshtein": levenshtein,
-    "jaro_winkler": jaro_winkler,
+    "exact": lambda a, b: exact_match(a[:, None], b[None, :]),
+    "abs_diff": lambda a, b: abs_diff(
+        a.astype(np.float64)[:, None], b.astype(np.float64)[None, :]
+    ),
+    "levenshtein": lambda a, b: levenshtein(a.astype(object), b.astype(object)),
+    "jaro_winkler": lambda a, b: jaro_winkler(a.astype(object), b.astype(object)),
 }
 
 
@@ -192,27 +194,7 @@ class Scorer:
             if comparator_fn is None:
                 raise ValueError(f"Unknown comparator: {cfg.comparator}")
 
-            if cfg.comparator == "abs_diff":
-                a_f = a.astype(np.float64)[:, None]
-                b_f = b.astype(np.float64)[None, :]
-                field_score = comparator_fn(a_f, b_f)
-            else:
-                a_obj = a.astype(object)
-                b_obj = b.astype(object)
-                if a_obj.ndim == 1:
-                    field_scores = []
-                    for val_a in a_obj:
-                        row = []
-                        for val_b in b_obj:
-                            cmp_result = comparator_fn(
-                                np.array([val_a]), np.array([val_b])
-                            )
-                            row.append(cmp_result[0, 0])
-                        field_scores.append(row)
-                    field_score = np.array(field_scores, dtype=np.float64)
-                else:
-                    field_score = comparator_fn(a_obj, b_obj)
-
+            field_score = comparator_fn(a, b)
             total_score += cfg.weight * field_score
 
         return total_score

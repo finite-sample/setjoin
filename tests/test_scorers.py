@@ -128,3 +128,26 @@ class TestScoreMatrix:
         assert scores.shape == (2, 2)
         assert scores[0, 0] == 0.0
         assert scores[0, 1] == -3.0
+
+
+@pytest.mark.parametrize("empty", [False, True])
+def test_default_exact_scores_all_pairs(empty: bool) -> None:
+    source = pd.DataFrame({"group": [] if empty else ["b", "a"]})
+    target = pd.DataFrame({"group": ["a", "b", "b"]})
+    scores = Scorer({"group": {"weight": 2.0}}).score(source, target)
+    expected = np.array([[0, 2, 2], [2, 0, 0]], dtype=float)
+    np.testing.assert_array_equal(scores, expected[: len(source)])
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("levenshtein", [[1.0, 0.5, 0.0], [0.0, 0.5, 0.0]]),
+        ("jaro_winkler", [[1.0, 0.7, 0.0], [0.0, 2 / 3, 0.0]]),
+    ],
+)
+def test_string_scores_all_pairs(name: str, expected: list[list[float]]) -> None:
+    source = pd.DataFrame({"name": ["ab", "cd"]})
+    target = pd.DataFrame({"name": ["ab", "ad", "zz"]})
+    result = Scorer({"name": {"comparator": name}}).score(source, target)
+    np.testing.assert_allclose(result, expected)
