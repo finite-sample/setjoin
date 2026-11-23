@@ -20,7 +20,7 @@ jobs:
     with:
       # requires-python is >=3.12, so the reusable default matrix's 3.11 leg
       # cannot resolve.
-      python-versions: '["3.12", "3.14"]'
+      python-versions: '["3.13", "3.14"]'
       wheel-import: setjoin
       coverage-floor: 75
       run-preen: true
