@@ -25,14 +25,14 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "numpy>=1.26",
-    "pandas>=2.0",
-    "scipy>=1.12",
+    "numpy>=2.1.0",
+    "pandas>=2.2.3",
+    "scipy>=1.14.1",
     "rich>=13.0",
 ]
 
 [project.optional-dependencies]
-viz = ["matplotlib>=3.8"]
+viz = ["matplotlib>=3.9.2"]
 
 [project.urls]
 Homepage = "https://github.com/finite-sample/setjoin"
